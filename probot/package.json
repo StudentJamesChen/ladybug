@@ -28,5 +28,6 @@
   "engines": {
     "node": ">= 18"
   },
-  "type": "module"
+  "type": "module",
+  "main": "index.js"
 }
