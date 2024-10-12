@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import fetch from 'node-fetch';
 
+// need to add variable to make a route / env variable
+
 export const cacheRepo = async (app, context) => {
     const repo = context.payload.repository;
     const repoName = repo.name;
@@ -49,7 +51,7 @@ export const cacheRepo = async (app, context) => {
         console.log(`Repo ${repoName} extracted successfully to ${cacheDir}`);
 
         // Send zip to Flask backend
-        const flask_response = await fetch(`http://localhost:5000/preprocess`, {
+        const flask_response = await fetch(`http://127.0.0.1:5000/preprocess`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
