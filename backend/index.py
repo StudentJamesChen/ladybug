@@ -1,9 +1,21 @@
+from dotenv import find_dotenv, load_dotenv
 from flask import Flask, abort
 from flask import request
 import json
 from preprocess import Preprocessor
+import os
+import pprint
+from pymongo import MongoClient
+
+load_dotenv(find_dotenv())
+password = os.environ.get("MONGOPASSWORD")
 
 app = Flask(__name__)
+connection_string = f"mongodb+srv://samarkaranch:{password}@cluster0.269ml.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+
+client = MongoClient(connection_string)
+dbs = client.list_database_names()
+test_db = client.test
 
 @app.route("/", methods=["GET","POST"])
 def index():
