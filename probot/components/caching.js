@@ -1,69 +1,35 @@
-// caching.js
-import AdmZip from 'adm-zip';
-import path from 'path';
-import fs from 'fs';
-import fetch from 'node-fetch';
+import axios from 'axios';
 
 export const cacheRepo = async (app, context) => {
-    const repo = context.payload.repository;
-    const repoName = repo.name;
-    const hostName = repo.owner.login;
-    const defaultBranch = repo.default_branch; // e.g., 'master'
+  const repo = context.payload.repository;
+  const repoName = repo.name;
+  const hostName = repo.owner.login;
+  const defaultBranch = repo.default_branch;
 
-    console.log('Caching repo:', repoName);
-    console.log('Owner:', hostName);
-    console.log('Default branch:', defaultBranch);
+  console.log('Caching repo:', repoName);
 
-    try {
-        const zipResponse = await context.octokit.repos.downloadZipballArchive({
-            owner: hostName,
-            repo: repoName,
-            ref: defaultBranch,
-        }, {
-            // Ensure the response is returned as a buffer
-            headers: {
-                'Accept': 'application/vnd.github.v3.raw'
-            },
-            request: {
-                // Specify response type if necessary
-                responseType: 'arraybuffer'
-            }
-        });
+  try {
+    const zipResponse = await context.octokit.repos.downloadZipballArchive({
+      owner: hostName,
+      repo: repoName,
+      ref: defaultBranch,
+    });
 
-        // Convert the response data to a Buffer
-        const buffer = Buffer.from(zipResponse.data, 'binary');
+    // Send the zip data directly to Flask backend
+    const flaskResponse = await axios.post('http://localhost:5000/preprocess', zipResponse.data, {
+      headers: {
+        'Content-Type': 'application/zip',
+      },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+    });
 
-        // Define the directory to cache
-        const cacheDir = path.resolve(`./cached_repos/${repoName}`);
-        fs.mkdirSync(cacheDir, { recursive: true });
-
-        // Store the zip file
-        const zipPath = path.resolve(cacheDir, `${repoName}.zip`);
-        fs.writeFileSync(zipPath, buffer);
-
-        console.log(`Repo ${repoName} cached successfully at ${zipPath}`);
-
-        const zip = new AdmZip(zipPath);
-        zip.extractAllTo(cacheDir, true);
-
-        console.log(`Repo ${repoName} extracted successfully to ${cacheDir}`);
-
-        // Send zip to Flask backend
-        const flask_response = await fetch(`http://localhost:5000/preprocess`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ path: cacheDir }),
-        });
-
-        if (!flask_response.ok) {
-            throw new Error(`Failed to send data to Flask backend: ${flask_response.status} ${flask_response.statusText}`);
-        }
-
-        console.log('Data sent to Flask backend successfully.');
-
-    } catch (error) {
-        console.error('Error while caching repo:', error);
+    if (flaskResponse.status !== 200) {
+      throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
     }
+
+    console.log('Data sent to Flask backend successfully.');
+  } catch (error) {
+    console.error('Error while caching repo:', error);
+  }
 };
