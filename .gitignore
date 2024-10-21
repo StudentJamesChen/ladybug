@@ -9,3 +9,4 @@ coverage
 lib
 /.env.example
 cached_repos/
+backend/.env
