@@ -11,10 +11,7 @@ export default (app) => {
 		const issue = context.payload.issue;
 		const issueBody = issue.body;
 
-
 		await cacheRepo(app, context);
-
-
 
 		let issueCommentBody = 'Thank you for opening this issue!';
 		if (issueBody) {
