@@ -3,6 +3,7 @@ certifi==2024.8.30
 charset-normalizer==3.4.0
 click==8.1.7
 filelock==3.16.1
+dnspython==2.7.0
 Flask==3.0.3
 fsspec==2024.9.0
 huggingface-hub==0.25.2
@@ -25,4 +26,6 @@ tqdm==4.66.5
 transformers==4.45.2
 typing_extensions==4.12.2
 urllib3==2.2.3
+pymongo==4.10.1
+python-dotenv==1.0.1
 Werkzeug==3.0.4
