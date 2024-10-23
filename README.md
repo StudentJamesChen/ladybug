@@ -44,14 +44,7 @@ Ladybug automates bug localization by triggering an analysis whenever a new issu
 
 ## Setup
 
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/bug-localization-bot.git
-cd bug-localization-bot
-```
-
-### 2. Flask Backend Setup
+### Flask Backend Setup
 
 #### Initialize Virtual Environment
 
@@ -90,7 +83,7 @@ cd backend
 python index.py
 ```
 
-### 3. Probot Bot Setup
+### Probot Bot Setup
 
 #### Install Dependencies
 
