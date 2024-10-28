@@ -20,8 +20,12 @@ Pseudocode:
 
 # Load stop words from file into set
 def load_stop_words(file_path: str):
-    with open(file_path, "r") as file:
-        return set(file.read().splitlines())
+    try:
+        with open(file_path, "r") as file:
+            return set(file.read().splitlines())
+    except FileNotFoundError:
+        print(f"Error: The Java keywords file at '{file_path}' was not found.")
+        return
 
 # Main driver method for preprocessing bug reports
 def preprocess_bug_report(bug_report_path: str):
@@ -36,7 +40,7 @@ def preprocess_bug_report(bug_report_path: str):
         with open(bug_report_path, "r") as file:
             bug_report_string = file.read()
     except FileNotFoundError:
-        print(f"Error: The file '{bug_report_path}' was not found.")
+        print(f"Error: The bug report at '{bug_report_path}' was not found.")
         return 
 
     # preprocessText()
