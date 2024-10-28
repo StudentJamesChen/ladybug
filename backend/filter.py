@@ -29,5 +29,10 @@ def filter_files(repo_path: str):
             # Delete non-Java files
             else:
                 file.unlink()
+    
+    # Delete empty directories in reverse order
+    for dir_path in sorted(repo.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if dir_path.is_dir() and not any(dir_path.iterdir()):
+            dir_path.rmdir()
 
     return java_files
