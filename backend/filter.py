@@ -31,6 +31,7 @@ def filter_files(repo_path: str):
                 file.unlink()
     
     # Delete empty directories in reverse order
+    # Sort paths based on depth and delete children first before parents
     for dir_path in sorted(repo.rglob("*"), key=lambda p: len(p.parts), reverse=True):
         if dir_path.is_dir() and not any(dir_path.iterdir()):
             dir_path.rmdir()
