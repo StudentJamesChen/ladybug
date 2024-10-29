@@ -20,6 +20,16 @@ Pseudocode:
 
 # Main driver method for preprocessing bug reports
 def preprocess_bug_report(bug_report_path: str):
+    """
+    Preprocesses bug reports and applies query reformulation (MVP)
+
+    Args:
+        bug_report_path (str): The path to the bug report
+
+    Returns:
+        String: The preprocessed bug report
+    """
+
     # Put bug report content into a string
     try:
         with open(bug_report_path, "r") as file:
