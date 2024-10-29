@@ -18,23 +18,8 @@ Pseudocode:
         b. Write preprocessed bug report to text file
 """
 
-# Load stop words from file into set
-def load_stop_words(file_path: str):
-    try:
-        with open(file_path, "r") as file:
-            return set(file.read().splitlines())
-    except FileNotFoundError:
-        print(f"Error: The Java keywords file at '{file_path}' was not found.")
-        return
-
 # Main driver method for preprocessing bug reports
 def preprocess_bug_report(bug_report_path: str):
-    # Read stop words
-    java_keywords_path = "resources/java-keywords-bugs.txt"
-    stop_words_path = "resources/stop-words-bugs.txt"
-
-    stop_words = load_stop_words(java_keywords_path)
-
     # Put bug report content into a string
     try:
         with open(bug_report_path, "r") as file:
@@ -43,7 +28,8 @@ def preprocess_bug_report(bug_report_path: str):
         print(f"Error: The bug report at '{bug_report_path}' was not found.")
         return 
 
-    # preprocessText()
+    # Run bug report through preprocessor [PENDING TERRY'S IMPLEMENTATION]
+    preprocessed_bug_report = preprocessText(bug_report_string)
 
     # Apply query reformulation (MVP)
 
