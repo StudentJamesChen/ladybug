@@ -3,11 +3,11 @@
  * @param {import('probot').Probot} app
  */
 
-import {cacheRepo} from './components/caching.js';
+import {sendRepo} from './components/sendRepo.js';
 
 
 export default (app) => {
-	app.on(["issues.opened", "issues.edited"], async (context) => {
+	/*app.on(["issues.opened", "issues.edited"], async (context) => {
 		const issue = context.payload.issue;
 		const issueBody = issue.body;
 
@@ -58,6 +58,32 @@ export default (app) => {
 				}
 			}
 		}
-	});
-};
+	});*/
 
+// Begin initialization process, compute and cache repo embeddings.
+	app.on("installation_repositories.added", async (context) => {
+		const {repositories_added} = context.payload;
+		console.log('Payload:', context.payload);
+
+		try {
+			for (const repo of repositories_added) {
+				// Extract owner and repo name from full_name
+				const [ownerName, repoName] = repo.full_name.split('/');
+
+				// Optionally, you can create an issue or perform other actions here
+				await context.octokit.issues.create({
+					owner: ownerName,
+					repo: repoName,
+					title: 'Hello!',
+					body: 'hi',
+				});
+
+				// Pass the repo and context to sendRepo
+				await sendRepo(repo, context);
+			}
+		} catch (error) {
+			console.error('Failed to process repositories:', error);
+		}
+	});
+
+};
