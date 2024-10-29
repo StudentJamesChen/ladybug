@@ -18,7 +18,7 @@ password = os.environ.get("MONGOPASSWORD")
 app = Flask(__name__)
 
 # Configuration Flag: Set to False to disable database and use local file storage
-USE_DATABASE = False
+USE_DATABASE = True
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -91,7 +91,7 @@ def initialization():
         'owner': owner,
         'commit_sha': latest_commit_sha,
         'embeddings': embeddings,
-        'stored_at': datetime.utcnow().isoformat() + 'Z'
+        'stored_at': datetime.now(datetime.UTC).isoformat() + 'Z'
     }
 
     # Store embeddings
@@ -191,7 +191,7 @@ def report():
             'owner': owner,
             'commit_sha': latest_commit_sha,
             'embeddings': embeddings,
-            'stored_at': datetime.utcnow().isoformat() + 'Z'
+            'stored_at': datetime.now(datetime.UTC).isoformat() + 'Z'
         }
 
         # Store embeddings
