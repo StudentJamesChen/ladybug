@@ -84,6 +84,9 @@ def initialization():
     except GitCommandError as e:
         abort(500, description=f'Git error: {e}')
 
+    # Preprocessing
+
+
     # Compute embeddings
     embeddings = Preprocessor.preprocess_files(repo_dir)
     embeddings_document = {
@@ -91,7 +94,7 @@ def initialization():
         'owner': owner,
         'commit_sha': latest_commit_sha,
         'embeddings': embeddings,
-        'stored_at': datetime.now(datetime.UTC).isoformat() + 'Z'
+        'stored_at': datetime.now().isoformat() + 'Z'
     }
 
     # Store embeddings
@@ -191,7 +194,7 @@ def report():
             'owner': owner,
             'commit_sha': latest_commit_sha,
             'embeddings': embeddings,
-            'stored_at': datetime.now(datetime.UTC).isoformat() + 'Z'
+            'stored_at': datetime.now().isoformat() + 'Z'
         }
 
         # Store embeddings
