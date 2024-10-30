@@ -1,51 +1,105 @@
-import logging
-import os
-
+import re
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import wordpunct_tokenize
 
 class Preprocessor:
-    @staticmethod
-    def preprocess_files(repo_dir: str):
+    def camel_case_split(identifier):
         """
-        Walk through the repository directory, process each non-hidden file,
-        and generate embeddings while ignoring hidden files and directories.
+        Splits camelCase words via regular expression
 
         Args:
-            repo_dir (str): The path to the repository directory.
+            identifier (string): token to be matched
 
         Returns:
-            list: A list of embedding dictionaries for each processed file.
+            list: split tokens
         """
-        logger = logging.getLogger(__name__)
-        embeddings = []
-        logger.info(f"Starting preprocessing of repository: {repo_dir}")
+
+        matches = re.finditer('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)', identifier)
+        return [m.group(0) for m in matches]
+    
+    def tokenize_text(text):
+        """
+        Tokenizes the text into individual words
+        Splits camelCase words
+        Removes cases
+
+        Args:
+            text (string): string to be tokenized
+
+        Returns:
+            list: tokens
+        """
+
+        tokens = []
+
+        # Tokenize the input text
+        for token in wordpunct_tokenize(text):
+            for word in Preprocessor.camel_case_split(token):
+                tokens.append(word)
+
+        # Remove short tokens
+        tokens = [token for token in tokens if len(token) > 2]
+
+        return tokens
+    
+    def remove_special_characters(text):
+        """
+        Removes special characters and punctuation from input text
+
+        Args:
+            text (string): string to have special chars removed 
+
+        Returns:
+            text (string): new string with special chars removed
+        """
+        
+        # Replace escape character with a ' '
+        text = text.replace("\n", " ")
+
+        # Replace special characters and numbers with a ' '
+        text = re.sub("[^A-Za-z\s]+", " ", text)
+        return text
+    
+    def preprocess_text(text, stop_words_path):
+        """
+        Preprocesses input text by
+            - Removing Numbers
+            - Removing special characters
+            - Removing punctuation
+            - Removing tokens of size 1-2
+            - Removing cases
+            - Removing inputted stop words
+
+        Args:
+            text (string): text to be preprocessed
+            stop_words (string): path to a stop words file
+
+        Returns:
+            string: preprocessed text
+        """
+
+        # Remove all special chars and punctuation from the text
+        text = Preprocessor.remove_special_characters(text)
+
+        # Tokenize the text
+        tokens = Preprocessor.tokenize_text(text)
 
         try:
-            for dirpath, dirnames, filenames in os.walk(repo_dir):
-                # Modify dirnames in-place to skip hidden directories
-                original_dirnames = dirnames.copy()
-                dirnames[:] = [d for d in dirnames if not d.startswith('.')]
-                skipped_dirs = set(original_dirnames) - set(dirnames)
-                for skipped_dir in skipped_dirs:
-                    logger.debug(f"Skipped hidden directory: {os.path.join(dirpath, skipped_dir)}")
+            # Read stop words from the input
+            with open(stop_words_path) as f:
+                stop_words = set(f.read().splitlines())
+        except OSError as e:
+            return FileNotFoundError
 
-                for filename in filenames:
-                    # Skip hidden files
-                    if filename.startswith('.'):
-                        logger.debug(f"Skipped hidden file: {os.path.join(dirpath, filename)}")
-                        continue
 
-                    file_path = os.path.join(dirpath, filename)
-                    # Placeholder for actual embedding logic
-                    embedding = {
-                        'file_path': file_path,
-                        'embedding': 'dummy_embedding',  # Replace with actual embedding logic
-                    }
-                    embeddings.append(embedding)
-                    logger.debug(f"Processed file: {file_path}")
+        # Remove stop words
+        tokens = [token for token in tokens if token not in stop_words]
 
-        except Exception as e:
-            logger.error(f"Error during preprocessing: {e}")
-            raise  # Re-raise exception after logging
+        # Lemmatize the tokens. i.e., running -> run
+        lemmatizer = WordNetLemmatizer();
+        tokens = [lemmatizer.lemmatize(token) for token in tokens]
 
-        logger.info(f"Completed preprocessing. Total files processed: {len(embeddings)}")
-        return embeddings
+        # Join the tokens into a single string and remove cases
+        preprocessed_text = " ".join(tokens).lower()
+
+        return preprocessed_text
