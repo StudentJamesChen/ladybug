@@ -18,6 +18,8 @@ Pseudocode:
         b. Write preprocessed bug report to text file
 """
 
+from preprocess import Preprocessor
+
 # Main driver method for preprocessing bug reports
 def preprocess_bug_report(bug_report_path: str):
     """
@@ -41,7 +43,7 @@ def preprocess_bug_report(bug_report_path: str):
         return 
 
     # Run bug report through preprocessor [PENDING TERRY'S IMPLEMENTATION]
-    preprocessed_bug_report = preprocessText(bug_report_string, stop_words_path)
+    preprocessed_bug_report = Preprocessor.preprocess_text(bug_report_string, stop_words_path)
 
     # Apply query reformulation (MVP)
 
