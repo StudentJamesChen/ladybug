@@ -84,9 +84,13 @@ class Preprocessor:
         # Tokenize the text
         tokens = Preprocessor.tokenize_text(text)
 
-        # Read stop words from the input
-        with open(stop_words_path) as f:
-            stop_words = set(f.read().splitlines())
+        try:
+            # Read stop words from the input
+            with open(stop_words_path) as f:
+                stop_words = set(f.read().splitlines())
+        except OSError as e:
+            return FileNotFoundError
+
 
         # Remove stop words
         tokens = [token for token in tokens if token not in stop_words]
