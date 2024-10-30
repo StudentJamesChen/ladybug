@@ -9,7 +9,7 @@ from flask import Flask, abort, request, jsonify
 from git import Repo, GitCommandError
 from pymongo import MongoClient
 
-from preprocess import Preprocessor
+from fake_preprocess import Fake_preprocessor
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -44,6 +44,103 @@ if USE_DATABASE:
         USE_DATABASE = False  # Fallback to file storage if DB connection fails
 
 
+def extract_and_validate_repo_info(data):
+    """
+    Extracts and validates repository information from the incoming request data.
+
+    :param data: The JSON data from the request.
+    :return: A dictionary containing repository information.
+    :raises: aborts the request with a 400 error if validation fails.
+    """
+    logger.debug("Extracting and validating repository information.")
+
+    # Extract repository information from data
+    repo_url = data.get('repo_url')
+    owner = data.get('owner')
+    repo_name = data.get('repo_name')
+    default_branch = data.get('default_branch')
+    latest_commit_sha = data.get('latest_commit_sha')
+
+    # Validate required fields
+    if not all([repo_url, owner, repo_name, default_branch, latest_commit_sha]):
+        logger.error("Missing required repository information.")
+        abort(400, description="Missing required repository information")
+
+    repo_info = {
+        'repo_url': repo_url,
+        'owner': owner,
+        'repo_name': repo_name,
+        'default_branch': default_branch,
+        'latest_commit_sha': latest_commit_sha
+    }
+
+    logger.debug(f"Validated repository information: {repo_info}")
+    return repo_info
+
+
+def store_embeddings(embeddings_document):
+    """
+    Stores the embeddings document in the database or local file.
+
+    :param embeddings_document: The embeddings data to store.
+    :return: None
+    :raises: aborts the request with a 500 error if storage fails.
+    """
+    logger.debug("Storing embeddings.")
+
+    if USE_DATABASE:
+        try:
+            # Use update_one with upsert=True to ensure only one document per repo
+            embeddings_collection.update_one(
+                {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
+                {'$set': embeddings_document},
+                upsert=True
+            )
+            logger.info('Embeddings stored in database successfully.')
+        except Exception as e:
+            logger.error(f"Failed to store embeddings in database: {e}")
+            abort(500, description="Failed to store embeddings in database.")
+    else:
+        try:
+            store_embeddings_in_file(embeddings_document)
+            logger.info('Embeddings stored in text file successfully.')
+        except Exception as e:
+            logger.error(f"Failed to store embeddings in file: {e}")
+            abort(500, description="Failed to store embeddings in file.")
+
+
+def retrieve_stored_sha(owner, repo_name):
+    """
+    Retrieves the stored commit SHA for the specified repository.
+
+    :param owner: The repository owner's username.
+    :param repo_name: The repository name.
+    :return: The stored commit SHA or None if not found.
+    :raises: aborts the request with a 500 error if retrieval fails.
+    """
+    logger.debug(f"Retrieving stored SHA for {owner}/{repo_name}.")
+
+    stored_commit_sha = None
+    if USE_DATABASE:
+        try:
+            existing_embedding = embeddings_collection.find_one(
+                {'repo_name': repo_name, 'owner': owner},
+                sort=[('stored_at', -1)]  # Get the latest record
+            )
+            if existing_embedding:
+                stored_commit_sha = existing_embedding.get('commit_sha')
+                logger.debug(f"Retrieved stored SHA: {stored_commit_sha}")
+        except Exception as e:
+            logger.error(f"Database query failed: {e}")
+            abort(500, description="Database query failed.")
+    else:
+        # Retrieve the latest SHA from the local file
+        stored_commit_sha = get_latest_sha_from_file(owner, repo_name)
+        logger.debug(f"Retrieved stored SHA from file: {stored_commit_sha}")
+
+    return stored_commit_sha
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     return jsonify({"message": "Hello, world!"}), 200
@@ -65,62 +162,34 @@ def initialization():
 
     logger.info("Received data from /initialization request.")
 
-    # Extract repository information from data
-    repo_url = data.get('repo_url')
-    owner = data.get('owner')
-    repo_name = data.get('repo_name')
-    default_branch = data.get('default_branch')
-    latest_commit_sha = data.get('latest_commit_sha')
+    # Extract and validate repository information
+    repo_info = extract_and_validate_repo_info(data)
 
-    # Validate required fields
-    if not all([repo_url, owner, repo_name, default_branch, latest_commit_sha]):
-        abort(400, description="Missing required repository information")
-
-    repo_dir = os.path.join('repos', owner, repo_name)
+    repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
 
     # Clone the repository (purge if exists)
     try:
-        clone_repo(repo_url, repo_dir)
+        clone_repo(repo_info['repo_url'], repo_dir)
     except GitCommandError as e:
         abort(500, description=f'Git error: {e}')
 
-    # Preprocessing
-
-
     # Compute embeddings
-    embeddings = Preprocessor.preprocess_files(repo_dir)
+    embeddings = Fake_preprocessor.preprocess_files(repo_dir)
     embeddings_document = {
-        'repo_name': repo_name,
-        'owner': owner,
-        'commit_sha': latest_commit_sha,
+        'repo_name': repo_info['repo_name'],
+        'owner': repo_info['owner'],
+        'commit_sha': repo_info['latest_commit_sha'],
         'embeddings': embeddings,
         'stored_at': datetime.now().isoformat() + 'Z'
     }
 
     # Store embeddings
-    if USE_DATABASE:
-        try:
-            # Use update_one with upsert=True to ensure only one document per repo
-            embeddings_collection.update_one(
-                {'repo_name': repo_name, 'owner': owner},
-                {'$set': embeddings_document},
-                upsert=True
-            )
-            logger.info('Embeddings stored in database successfully.')
-        except Exception as e:
-            logger.error(f"Failed to store embeddings in database: {e}")
-            abort(500, description="Failed to store embeddings in database.")
-    else:
-        try:
-            store_embeddings_in_file(embeddings_document)
-            logger.info('Embeddings stored in text file successfully.')
-        except Exception as e:
-            logger.error(f"Failed to store embeddings in file: {e}")
-            abort(500, description="Failed to store embeddings in file.")
+    store_embeddings(embeddings_document)
 
     # Optionally delete the repo directory after processing
     # shutil.rmtree(repo_dir)
     # logger.info(f"Deleted repository directory: {repo_dir}")
+    logger.info('Embeddings stored successfully.')
 
     return jsonify({"message": "Embeddings computed and stored"}), 200
 
@@ -145,78 +214,38 @@ def report():
 
     logger.info("Received data from /report request.")
 
-    # Extract repository information from data
-    repo_url = data.get('repo_url')
-    owner = data.get('owner')
-    repo_name = data.get('repo_name')
-    default_branch = data.get('default_branch')
-    latest_commit_sha = data.get('latest_commit_sha')
-
-    # Validate required fields
-    if not all([repo_url, owner, repo_name, default_branch, latest_commit_sha]):
-        abort(400, description="Missing required repository information")
+    # Extract and validate repository information
+    repo_info = extract_and_validate_repo_info(data)
 
     # Retrieve the stored SHA
-    stored_commit_sha = None
-    if USE_DATABASE:
-        try:
-            existing_embedding = embeddings_collection.find_one(
-                {'repo_name': repo_name, 'owner': owner},
-                sort=[('stored_at', -1)]  # Get the latest record
-            )
-            if existing_embedding:
-                stored_commit_sha = existing_embedding.get('commit_sha')
-        except Exception as e:
-            logger.error(f"Database query failed: {e}")
-            abort(500, description="Database query failed.")
-    else:
-        # Retrieve the latest SHA from the local file
-        stored_commit_sha = get_latest_sha_from_file(owner, repo_name)
+    stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
 
-    if stored_commit_sha == latest_commit_sha:
+    if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
         return jsonify({"message": "Embeddings are up to date"}), 200
     else:
         logger.info('Embeddings are outdated. Recomputing embeddings.')
 
-        repo_dir = os.path.join('repos', owner, repo_name)
+        repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
 
         # Clone the repository (purge if exists)
         try:
-            clone_repo(repo_url, repo_dir)
+            clone_repo(repo_info['repo_url'], repo_dir)
         except GitCommandError as e:
             abort(500, description=f'Git error: {e}')
 
         # Compute embeddings
-        embeddings = Preprocessor.preprocess_files(repo_dir)
+        embeddings = Fake_preprocessor.preprocess_files(repo_dir)
         embeddings_document = {
-            'repo_name': repo_name,
-            'owner': owner,
-            'commit_sha': latest_commit_sha,
+            'repo_name': repo_info['repo_name'],
+            'owner': repo_info['owner'],
+            'commit_sha': repo_info['latest_commit_sha'],
             'embeddings': embeddings,
             'stored_at': datetime.now().isoformat() + 'Z'
         }
 
         # Store embeddings
-        if USE_DATABASE:
-            try:
-                # Use update_one with upsert=True to ensure only one document per repo
-                embeddings_collection.update_one(
-                    {'repo_name': repo_name, 'owner': owner},
-                    {'$set': embeddings_document},
-                    upsert=True
-                )
-                logger.info('Embeddings updated in database successfully.')
-            except Exception as e:
-                logger.error(f"Failed to update embeddings in database: {e}")
-                abort(500, description="Failed to update embeddings in database.")
-        else:
-            try:
-                store_embeddings_in_file(embeddings_document)
-                logger.info('Embeddings updated in text file successfully.')
-            except Exception as e:
-                logger.error(f"Failed to update embeddings in file: {e}")
-                abort(500, description="Failed to update embeddings in file.")
+        store_embeddings(embeddings_document)
 
         # Optionally delete the repo directory after processing
         # shutil.rmtree(repo_dir)
@@ -228,7 +257,14 @@ def report():
 def clone_repo(repo_url, repo_dir):
     """
     Clones the repository. If the repository directory already exists, it is purged before cloning.
+
+    :param repo_url: The URL of the repository to clone.
+    :param repo_dir: The directory where the repository will be cloned.
+    :return: None
+    :raises: GitCommandError if cloning fails.
     """
+    logger.debug(f"Cloning repository from {repo_url} to {repo_dir}.")
+
     if os.path.exists(repo_dir):
         logger.info(f"Repository directory {repo_dir} exists. Purging for fresh clone.")
         shutil.rmtree(repo_dir)
@@ -244,7 +280,13 @@ def clone_repo(repo_url, repo_dir):
 def get_latest_sha_from_file(owner, repo_name):
     """
     Retrieves the latest commit SHA for the specified repository from the local embeddings_records.txt file.
+
+    :param owner: The repository owner's username.
+    :param repo_name: The repository name.
+    :return: The latest commit SHA or None if not found.
     """
+    logger.debug(f"Fetching latest SHA for {owner}/{repo_name} from file.")
+
     filename = 'embeddings_records.txt'
     if not os.path.exists(filename):
         logger.info(f"Embeddings records file {filename} does not exist.")
@@ -257,6 +299,7 @@ def get_latest_sha_from_file(owner, repo_name):
                     record = json.loads(line)
                     if (record['owner'] == owner and
                             record['repo_name'] == repo_name):
+                        logger.debug(f"Found matching record: {record}")
                         return record.get('commit_sha')
                 except json.JSONDecodeError:
                     logger.warning("Encountered invalid JSON record in embeddings_records.txt.")
@@ -270,7 +313,13 @@ def store_embeddings_in_file(embeddings_document):
     """
     Stores the embeddings document in the local embeddings_records.txt file.
     Overwrites existing embeddings for the repository to ensure a fresh update.
+
+    :param embeddings_document: The embeddings data to store.
+    :return: None
+    :raises: Exception if writing to the file fails.
     """
+    logger.debug("Storing embeddings in local file.")
+
     filename = 'embeddings_records.txt'
     try:
         # Read existing records
@@ -302,6 +351,7 @@ def store_embeddings_in_file(embeddings_document):
                 json_record = json.dumps(record)
                 file.write(json_record + '\n')
 
+        logger.info('Embeddings stored in text file successfully.')
     except Exception as e:
         logger.error(f"Failed to write to embeddings records file: {e}")
         raise
