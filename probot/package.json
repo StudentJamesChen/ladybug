@@ -18,6 +18,7 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2",
     "probot": "^13.0.1"
   },
@@ -28,5 +29,6 @@
   "engines": {
     "node": ">= 18"
   },
-  "type": "module"
+  "type": "module",
+  "main": "index.js"
 }
