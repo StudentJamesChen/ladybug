@@ -19,3 +19,20 @@ class test_preprocess(unittest.TestCase):
         actual_result = preprocess_bug_report(bug_report_path)
 
         self.assertEqual(expected_result, actual_result)
+
+    def test_pos_tagger(self):
+        text = "restarts"
+
+        expected_result = ""
+        actual_result = Preprocessor.get_pos_tag(text)
+
+        self.assertEqual(expected_result, actual_result)
+
+    def test_lemmatize(self):
+        text = "files"
+
+        expected_result = ""
+        actual_result = Preprocessor.lematize_tokens([text])
+
+        print(Preprocessor.get_pos_tag(text))
+        self.assertEqual(expected_result, actual_result)
