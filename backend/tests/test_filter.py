@@ -13,9 +13,19 @@ Tests to implement:
 10. empty repo
 """
 from ..filter import filter_files
+import pytest
 
 def test_filter_empty_repo(tmp_path):
     # Call filter on an empty directory (simulating an empty repo)
     result = filter_files(tmp_path)
 
     assert result == []
+
+def test_filter_invalid_path(tmp_path):
+    # Call filter on a non-existent path
+    invalid_path = tmp_path / "nonexistent_repo"
+    assert not invalid_path.exists()
+
+    with pytest.raises(ValueError, match="nonexistent_repo is not a valid directory."):
+        filter_files(invalid_path)
+
