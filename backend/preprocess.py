@@ -39,9 +39,6 @@ class Preprocessor:
             for word in Preprocessor.camel_case_split(token):
                 tokens.append(word)
 
-        # Remove short tokens
-        tokens = [token for token in tokens if len(token) > 2]
-
         return tokens
     
     def remove_special_characters(text):
@@ -100,7 +97,7 @@ class Preprocessor:
             tokens (list of strings): lematized tokens
         '''
         lemmatizer = WordNetLemmatizer()
-    
+
         # Call the get_pos_tag function to assign the correct POS tag to each token in tokens
         return [lemmatizer.lemmatize(token, Preprocessor.get_pos_tag(token)) for token in tokens]        
     
@@ -139,10 +136,16 @@ class Preprocessor:
         # Remove stop words
         tokens = [token for token in tokens if token not in stop_words]
 
+        # Remove cases
+        tokens = [token.lower() for token in tokens]
+
         # Lemmatize the tokens. i.e., running -> run
         tokens = Preprocessor.lematize_tokens(tokens)
+        
+        # Remove short tokens
+        tokens = [token for token in tokens if len(token) > 2]
 
         # Join the tokens into a single string and remove cases
-        preprocessed_text = " ".join(tokens).lower()
+        preprocessed_text = " ".join(tokens)
 
         return preprocessed_text

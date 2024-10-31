@@ -13,6 +13,8 @@ class test_preprocess(unittest.TestCase):
         self.assertEqual(expected_result, actual_result)
     
     def test_bug_report_preprocessing(self):
+        self.maxDiff = None
+
         bug_report_path = "temp_testing/bug_report_10.txt"
         
         expected_result = ""
@@ -21,7 +23,7 @@ class test_preprocess(unittest.TestCase):
         self.assertEqual(expected_result, actual_result)
 
     def test_pos_tagger(self):
-        text = "restarts"
+        text = "files"
 
         expected_result = ""
         actual_result = Preprocessor.get_pos_tag(text)
