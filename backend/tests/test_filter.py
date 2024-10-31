@@ -53,11 +53,30 @@ def test_filter_hidden_files(tmp_path):
 
     result = filter_files(tmp_path)
     
-    # Ensure only the visible Java file is included in the results
     assert Path(java_file) in result
     assert Path(hidden_java_file) not in result
     assert Path(hidden_non_java_file) not in result
     
-    # Check that no hidden files remain in the input directory
     hidden_files = [f for f in tmp_path.rglob('*') if f.name.startswith('.')]
     assert len(hidden_files) == 0, "Hidden files remain in the directory"
+
+def test_filter_only_java_files(tmp_path):
+    # Set up three Java files
+    java_file1 = tmp_path / "File1.java"
+    java_file2 = tmp_path / "File2.java"
+    java_file3 = tmp_path / "File3.java"
+    java_file1.write_text("public class File1 {}")
+    java_file2.write_text("public class File2 {}")
+    java_file3.write_text("public class File3 {}")
+
+    result = filter_files(tmp_path)
+
+    # Assert that exactly three Java files are returned
+    assert len(result) == 3, "Expected 3 Java files to remain after filtering"
+    assert java_file1 in result
+    assert java_file2 in result
+    assert java_file3 in result
+
+    # Assert that all three Java files remained
+    java_files = [f for f in tmp_path.rglob('*') if f.name.endswith('.java')]
+    assert len(java_files) == 3, "Java files incorrectly filtered from input path"
