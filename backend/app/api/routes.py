@@ -1,19 +1,27 @@
 import logging
 import os
-import datetime
 import json
 import shutil
+
 from flask import Blueprint, abort, request, jsonify
 from git import Repo, GitCommandError
+from datetime import datetime
 
 from services.fake_preprocess import Fake_preprocessor
+from database.database import Database
+
+db = Database()
+db.initialize_mongo()
+client = db.get_client()
+test_db = client.test
+embeddings_collection = test_db.embeddings
 
 routes = Blueprint('routes', __name__)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@routes.route("/initialization")
+@routes.route("/initialization", methods = ["POST"])
 def initialization():
     """
     Initialization Endpoint:
@@ -60,7 +68,7 @@ def initialization():
 
     return jsonify({"message": "Embeddings computed and stored"}), 200
 
-@routes.route('/report')
+@routes.route('/report', methods = ["POST"])
 def report():
     """
     Report Endpoint:
@@ -265,7 +273,7 @@ def store_embeddings(embeddings_document):
     """
     logger.debug("Storing embeddings.")
 
-    if USE_DATABASE:
+    if db.USE_DATABASE:
         try:
             # Use update_one with upsert=True to ensure only one document per repo
             embeddings_collection.update_one(
@@ -298,7 +306,7 @@ def retrieve_stored_sha(owner, repo_name):
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name}.")
 
     stored_commit_sha = None
-    if USE_DATABASE:
+    if db.USE_DATABASE:
         try:
             existing_embedding = embeddings_collection.find_one(
                 {'repo_name': repo_name, 'owner': owner},

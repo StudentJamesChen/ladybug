@@ -9,6 +9,7 @@ from pymongo import MongoClient
 
 from app.api.routes import routes
 from services.fake_preprocess import Fake_preprocessor
+from database.database import Database
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -17,8 +18,14 @@ password = os.environ.get("MONGOPASSWORD")
 app = Flask(__name__)
 app.register_blueprint(routes)
 
+# Initializes the client
+db = Database()
+db.initialize_mongo()
+client = db.get_client()
+
+
 # Configuration Flag: Set to False to disable database and use local file storage
-USE_DATABASE = True
+db.USE_DATABASE = True
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -27,13 +34,8 @@ logger = logging.getLogger(__name__)
 # Initialize MongoDB connection
 embeddings_collection = None
 
-if USE_DATABASE:
+if db.USE_DATABASE:
     try:
-        connection_string = (
-            f"mongodb+srv://samarkaranch:{password}@cluster0.269ml.mongodb.net/"
-            "?retryWrites=true&w=majority&appName=Cluster0"
-        )
-        client = MongoClient(connection_string)
         dbs = client.list_database_names()
         test_db = client.test
         embeddings_collection = test_db.embeddings
