@@ -9,7 +9,7 @@ from flask import Flask, abort, request, jsonify
 from git import Repo, GitCommandError
 from pymongo import MongoClient
 
-from fake_preprocess import Fake_preprocessor
+from services.fake_preprocess import Fake_preprocessor
 
 # Load environment variables
 load_dotenv(find_dotenv())
