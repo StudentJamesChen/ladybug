@@ -18,7 +18,7 @@ Pseudocode:
         b. Write preprocessed bug report to text file
 """
 
-from preprocess import Preprocessor
+from backend.services.preprocess import Preprocessor
 
 # Main driver method for preprocessing bug reports
 def preprocess_bug_report(bug_report_path: str):
