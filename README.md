@@ -160,7 +160,7 @@ deactivate
 
 - **Bot Doesn't Respond to Issues:**
   - Ensure the bot is running (`npm start`).
-  - Verify the GitHub App is installed on the correct repository.
+  - Verify the GitHub App is installed on your repository.
   - Check webhook configurations in the GitHub App settings.
 
 - **Backend Errors:**
