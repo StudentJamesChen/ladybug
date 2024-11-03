@@ -10,6 +10,8 @@ from datetime import datetime
 from services.fake_preprocess import Fake_preprocessor
 from database.database import Database
 
+from services.preprocess_bug_report import preprocess_bug_report
+
 db = Database()
 db.initialize_mongo()
 client = db.get_client()
@@ -68,11 +70,21 @@ def initialization():
 
     return jsonify({"message": "Embeddings computed and stored"}), 200
 
-@routes.route('/report', methods = ["POST"])
+
+import os
+import json
+import shutil
+from datetime import datetime
+from flask import request, jsonify, abort
+from git import Repo, GitCommandError
+
+
+@routes.route('/report', methods=["POST"])
 def report():
     """
     Report Endpoint:
     - Receives repository information with the latest_commit_sha.
+    - Writes the 'issue' to ./reports/repo_name/report.txt.
     - Checks if the provided SHA matches the stored SHA.
     - If SHAs do not match:
         - Reclones the repository.
@@ -86,13 +98,40 @@ def report():
     if not data:
         abort(400, description="Invalid JSON data")
 
+    repository = data.get('repository')
+    issue = data.get('issue')
+    if not repository or not issue:
+        abort(400, description="Missing 'repository' or 'issue' in the data")
+
     logger.info("Received data from /report request.")
 
     # Extract and validate repository information
-    repo_info = extract_and_validate_repo_info(data)
+    repo_info = extract_and_validate_repo_info(repository)
+
+    try:
+        reports_dir = os.path.join('reports', repo_info['repo_name'])
+        os.makedirs(reports_dir, exist_ok=True)  # Create the directory if it doesn't exist
+
+        report_file_path = os.path.join(reports_dir, 'report.txt')
+        with open(report_file_path, 'w', encoding='utf-8') as report_file:
+            report_file.write(issue)
+
+        logger.info(f"Issue written to {report_file_path}.")
+    except Exception as e:
+        logger.error(f"Failed to write issue to file: {e}")
+        abort(500, description="Failed to write issue to file")
 
     # Retrieve the stored SHA
     stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
+
+    print(report_file_path)
+    try :
+        preprocessed_bug_report = preprocess_bug_report(report_file_path)
+        print(preprocessed_bug_report)
+    except Exception as e:
+        logger.error(f"Failed to preprocess bug report: {e}")
+        abort(500, description="Failed to preprocess bug report")
+
 
     if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
@@ -126,7 +165,7 @@ def report():
         # logger.info(f"Deleted repository directory: {repo_dir}")
 
         return jsonify({"message": "Embeddings recomputed and updated"}), 200
-    
+
 def clone_repo(repo_url, repo_dir):
     """
     Clones the repository. If the repository directory already exists, it is purged before cloning.
@@ -165,7 +204,7 @@ def get_latest_sha_from_file(owner, repo_name):
         logger.info(f"Embeddings records file {filename} does not exist.")
         return None
     try:
-        with open(filename, 'r') as file:
+        with open(filename, 'r', encoding='utf-8') as file:
             lines = file.readlines()
             for line in reversed(lines):  # Start from the end for the latest entry
                 try:
@@ -198,7 +237,7 @@ def store_embeddings_in_file(embeddings_document):
         # Read existing records
         records = {}
         if os.path.exists(filename):
-            with open(filename, 'r') as file:
+            with open(filename, 'r', encoding='utf-8') as file:
                 for line in file:
                     try:
                         record = json.loads(line)
@@ -219,7 +258,7 @@ def store_embeddings_in_file(embeddings_document):
         }
 
         # Write all records back to the file
-        with open(filename, 'w') as file:
+        with open(filename, 'w', encoding='utf-8') as file:
             for record in records.values():
                 json_record = json.dumps(record)
                 file.write(json_record + '\n')

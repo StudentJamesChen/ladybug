@@ -18,7 +18,7 @@ Pseudocode:
         b. Write preprocessed bug report to text file
 """
 
-from backend.services.preprocess import Preprocessor
+from services.preprocess import Preprocessor
 
 # Main driver method for preprocessing bug reports
 def preprocess_bug_report(bug_report_path: str):
@@ -32,7 +32,7 @@ def preprocess_bug_report(bug_report_path: str):
         String: The preprocessed bug report
     """
 
-    stop_words_path = "stop_words/java-keywords-bugs.txt"
+    stop_words_path = "data/stop_words/java-keywords-bugs.txt"
 
     # Put bug report content into a string
     try:

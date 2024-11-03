@@ -75,13 +75,17 @@ export default (app) => {
 			});
 
 			// Pass the full repository object and context to sendRepo
-			const data = await sendRepo(fullRepo, context);
+			const repoData = await sendRepo(fullRepo, context);
+			const fullData = {
+				issue: issue,
+				repository: fullRepo,
+			};
 
-			if (!data) {
+			if (!fullData) {
 				console.error(`sendRepo returned null for ${repository.full_name}. Skipping Axios POST.`);
 			} else {
 				try {
-					const flaskResponse = await axios.post('http://localhost:5000/initialization', data, {
+					const flaskResponse = await axios.post('http://localhost:5000/initialization', fullData, {
 						headers: {
 							'Content-Type': 'application/json',
 						},
