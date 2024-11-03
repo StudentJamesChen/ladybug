@@ -1,5 +1,6 @@
 import unittest
 from backend.services.preprocess import Preprocessor
+from backend.services.preprocess_bug_report import preprocess_bug_report
 
 class test_preprocess(unittest.TestCase):
     def test_wrong_path(self):
