@@ -12,3 +12,4 @@ cached_repos/
 backend/.env
 /myenv/
 backend/embeddings_records.txt
+/backend/repos
