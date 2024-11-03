@@ -22,9 +22,13 @@ def preprocess_source_code(root):
         file_path = os.path.join(root, file_name)
         if(os.path.isfile(file_path)):
             # Read and preprocess source code file and append it to the outout list
-            with open(file_path, "r") as f:
-                file_content = f.read()
-                preprocessed_file_content = Preprocessor.preprocess_text(file_content, stop_words_path)
-                preprocessed_files.append((file_path, file_name, preprocessed_file_content))
+            try: 
+                with open(file_path, "r") as f:
+                    file_content = f.read()
+                    preprocessed_file_content = Preprocessor.preprocess_text(file_content, stop_words_path)
+                    preprocessed_files.append((file_path, file_name, preprocessed_file_content))
+            except FileNotFoundError:
+                print(f"Error: The bsource code file at '{file_path}' was not found.")
+                return 
 
     return preprocessed_files
