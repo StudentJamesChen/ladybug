@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from backend.services.preprocess import Preprocessor
 
 def preprocess_source_code(root):
@@ -15,20 +15,21 @@ def preprocess_source_code(root):
 
     preprocessed_files = []
 
-    stop_words_path = "/data/stop_words/java-keywords-bugs.txt"
+    stop_words_path = "backend/data/stop_words/java-keywords-bugs.txt"
 
-    # Iterate through each file/folder in the root dir
-    for file_name in os.listdir(root):
-        file_path = os.path.join(root, file_name)
-        if(os.path.isfile(file_path)):
+    repo = Path(root)
+
+    # Traverse the root directory
+    for file_path in repo.rglob("*"):
+        if file_path.is_file():
             # Read and preprocess source code file and append it to the outout list
             try: 
                 with open(file_path, "r") as f:
                     file_content = f.read()
                     preprocessed_file_content = Preprocessor.preprocess_text(file_content, stop_words_path)
-                    preprocessed_files.append((file_path, file_name, preprocessed_file_content))
+                    preprocessed_files.append((file_path, file_path.name, preprocessed_file_content))
             except FileNotFoundError:
-                print(f"Error: The bsource code file at '{file_path}' was not found.")
-                return 
+                print(f"Error: The source code file at '{file_path}' was not found.")
+                return
 
     return preprocessed_files
