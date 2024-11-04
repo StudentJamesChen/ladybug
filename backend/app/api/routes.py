@@ -11,10 +11,6 @@ from services.fake_preprocess import Fake_preprocessor
 from database.database import Database
 
 db = Database()
-db.initialize_mongo()
-client = db.get_client()
-test_db = client.test
-embeddings_collection = test_db.embeddings
 
 routes = Blueprint('routes', __name__)
 
@@ -273,10 +269,10 @@ def store_embeddings(embeddings_document):
     """
     logger.debug("Storing embeddings.")
 
-    if db.USE_DATABASE:
+    if db.USE_MONGODB:
         try:
             # Use update_one with upsert=True to ensure only one document per repo
-            embeddings_collection.update_one(
+            db.get_embeddings_collection().update_one(
                 {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
                 {'$set': embeddings_document},
                 upsert=True
@@ -306,9 +302,9 @@ def retrieve_stored_sha(owner, repo_name):
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name}.")
 
     stored_commit_sha = None
-    if db.USE_DATABASE:
+    if db.USE_MONGODB:
         try:
-            existing_embedding = embeddings_collection.find_one(
+            existing_embedding = db.get_embeddings_collection().find_one(
                 {'repo_name': repo_name, 'owner': owner},
                 sort=[('stored_at', -1)]  # Get the latest record
             )
