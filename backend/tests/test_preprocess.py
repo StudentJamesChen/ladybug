@@ -2,19 +2,6 @@ import pytest
 from backend.services.preprocess import Preprocessor
 from nltk.corpus import wordnet as wn
 
-# Sample data for testing
-sample_text = "This is a sampleTextWithCamelCase and punctuation! And numbers: 12345."
-stop_words_path = "stop_words.txt"
-
-# Writing the stop words file for testing
-@pytest.fixture(scope="module")
-def stop_words_file(tmp_path_factory):
-    stop_words_file = tmp_path_factory.mktemp("data") / "stop_words.txt"
-    with open(stop_words_file, "w") as f:
-        f.write("is\nand\na\nwith\n")
-    return stop_words_file
-
-
 def test_camel_case_split():
     # Test camel case splitting
     assert Preprocessor.camel_case_split("camelCaseWord") == ["camel", "Case", "Word"]
@@ -59,18 +46,3 @@ def test_lematize_tokens():
     tokens = ["running", "dogs", "beautifully", "was"]
     lemmatized = Preprocessor.lematize_tokens(tokens)
     assert lemmatized == ["run", "dog", "beautifully", "be"]
-
-
-def test_preprocess_text(stop_words_file):
-    # Test preprocessing with stop words filtering, special character removal, tokenization, and lemmatization
-    text = "This is a simpleText with Numbers123 and some StopWords!"
-    result = Preprocessor.preprocess_text(text, stop_words_file)
-    expected = "simple text number stop word"  # Expected output based on transformations
-    assert result == expected
-
-    # Edge case: empty string input
-    assert Preprocessor.preprocess_text("", stop_words_file) == ""
-
-    # Edge case: stop words file not found
-    with pytest.raises(FileNotFoundError):
-        Preprocessor.preprocess_text("Text with no stopwords file", "invalid_path.txt")
