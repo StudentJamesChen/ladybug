@@ -1,4 +1,4 @@
-from backend.services.preprocess import Preprocessor
+from services.preprocess import Preprocessor
 from pathlib import Path
 
 # Main driver method for preprocessing bug reports

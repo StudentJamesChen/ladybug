@@ -23,9 +23,8 @@ db = Database()
 db.initialize_mongo()
 client = db.get_client()
 
-
-# Configuration Flag: Set to False to disable database and use local file storage
-db.USE_DATABASE = True
+# Configuration Flag: Add USE_DATABASE="False" to your .env to use local file database
+db.USE_DATABASE = os.environ.get("USE_DATABASE", "True").lower() == "true"
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
