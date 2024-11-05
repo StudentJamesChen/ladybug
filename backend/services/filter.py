@@ -23,8 +23,11 @@ def filter_files(repo_path: str):
     # Recursively visit subdirectories
     for file in repo.rglob("*"):
         if file.is_file():
+            # Remove hidden files
+            if file.name.startswith('.'):
+                file.unlink()
             # Add Java files to list
-            if file.suffix == ".java":
+            elif file.suffix == ".java":
                 java_files.append(file)
             # Delete non-Java files
             else:
