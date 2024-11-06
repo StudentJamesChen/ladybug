@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from services.preprocess_source_code import preprocess_source_code
+from ..services.preprocess_source_code import preprocess_source_code
 
 # Sample content for Java files
 sample_java_content = """

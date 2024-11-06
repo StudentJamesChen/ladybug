@@ -1,5 +1,5 @@
 import pytest
-from backend.services.preprocess import Preprocessor
+from ..services.preprocess import Preprocessor
 from nltk.corpus import wordnet as wn
 
 def test_camel_case_split():
