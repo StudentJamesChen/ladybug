@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from ..services.preprocess_bug_report import preprocess_bug_report
+from services.preprocess_bug_report import preprocess_bug_report
 
 # Sample bug report content for testing
 sample_bug_report_content = """
