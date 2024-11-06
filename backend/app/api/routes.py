@@ -10,6 +10,8 @@ from datetime import datetime
 from services.fake_preprocess import Fake_preprocessor
 from database.database import Database
 from services.preprocess_bug_report import preprocess_bug_report
+from services.preprocess_source_code import preprocess_source_code
+from services.filter import filter_files
 
 # Initialize Database
 db = Database()
@@ -134,24 +136,53 @@ def process_and_store_embeddings(repo_info):
 
     clone_repo(repo_info['repo_url'], repo_dir)
 
-    # TODO: Integrate with the repo preprocessing pipeline
-    # Fake preprocessing for now
-    embeddings = Fake_preprocessor.preprocess_files(repo_dir)
+
+    filtered_files = filter_files(repo_dir)
+    for file in filtered_files:
+        logger.info(f"Filtered file: {file}")
+
+    if not filtered_files:
+        logger.error("No Java files found in repository.")
+        raise ValueError("No Java files found in repository.")
+
+    # Preprocess the source code files
+    preprocessed_files = preprocess_source_code(repo_dir)
+    for file in preprocessed_files:
+        logger.info(f"Preprocessed file: {file}")
+
+    # Store embeddings
+    clean_paths = clean_embedding_paths_for_db(preprocessed_files, repo_dir)
     embeddings_document = {
         'repo_name': repo_info['repo_name'],
         'owner': repo_info['owner'],
         'commit_sha': repo_info['latest_commit_sha'],
-        'embeddings': embeddings,
+        'embeddings': clean_paths,
         'stored_at': datetime.utcnow().isoformat() + 'Z'
     }
-
-    # Store embeddings
     store_embeddings(embeddings_document)
 
     # Delete the repo directory after processing
     # shutil.rmtree(repo_dir)
     # logger.info(f"Deleted repository directory: {repo_dir}")
 
+def clean_embedding_paths_for_db(preprocessed_files, repo_dir):
+    """
+    Cleans up the file paths for the database by removing the repo_dir prefix.
+
+    :param preprocessed_files: List of preprocessed file tuples.
+    :param repo_dir: The directory of the repository.
+    """
+
+    # This converts it into an easily printable form and removes the repo_dir prefix
+    clean_files = []
+    for file in preprocessed_files:
+        clean_file = {
+            'path': str(file[0]).replace(repo_dir + '/', ''),
+            'name': file[1],
+            'content': file[2]
+        }
+        clean_files.append(clean_file)
+    return clean_files
 
 def clone_repo(repo_url, repo_dir):
     """
