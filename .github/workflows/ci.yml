@@ -2,7 +2,7 @@
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 # Configuration modified to support Ladybug
 
-name: CI Pipeline
+name: Lint and Test Flask Server
 
 on:
   push:
@@ -46,7 +46,6 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
-      env:
-        PYTHONPATH: ${{ github.workspace }}
       run: |
         pytest
+      working-directory: ./backend
