@@ -1,4 +1,4 @@
-from preprocess import Preprocessor
+from .preprocess import Preprocessor
 from pathlib import Path
 
 # Main driver method for preprocessing bug reports

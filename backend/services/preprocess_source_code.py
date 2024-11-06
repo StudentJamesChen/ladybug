@@ -1,5 +1,5 @@
 from pathlib import Path
-from preprocess import Preprocessor
+from .preprocess import Preprocessor
 
 def preprocess_source_code(root):
     """
