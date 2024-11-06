@@ -3,6 +3,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import wordpunct_tokenize
 from nltk.corpus import wordnet as wn
 from nltk import pos_tag
+from experimental_unixcoder.bug_localization import BugLocalization
 
 class Preprocessor:
     def camel_case_split(identifier):
@@ -147,5 +148,8 @@ class Preprocessor:
 
         # Join the tokens into a single string and remove cases
         preprocessed_text = " ".join(tokens)
+
+        # Calculate embeddings for preprocessed text
+        preprocessed_text = BugLocalization.encode_text(preprocessed_text)
 
         return preprocessed_text
