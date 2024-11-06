@@ -1,5 +1,5 @@
 from pathlib import Path
-from backend.services.preprocess import Preprocessor
+from services.preprocess import Preprocessor
 
 def preprocess_source_code(root):
     """
@@ -22,7 +22,7 @@ def preprocess_source_code(root):
     # Traverse the root directory
     for file_path in repo.rglob("*"):
         if file_path.is_file():
-            # Read and preprocess source code file and append it to the outout list
+            # Read and preprocess source code file and append it to the output list
             try: 
                 with open(file_path, "r") as f:
                     file_content = f.read()
