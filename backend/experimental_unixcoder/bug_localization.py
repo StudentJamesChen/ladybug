@@ -1,6 +1,6 @@
 # https://github.com/microsoft/CodeBERT/blob/master/UniXcoder/README.md
 import torch
-from unixcoder import UniXcoder
+from experimental_unixcoder.unixcoder import UniXcoder
 
 class BugLocalization:
     def __init__(self):
@@ -16,6 +16,7 @@ class BugLocalization:
         source_ids = torch.tensor(tokens_ids).to(self.device)
         _, embedding = self.model(source_ids)
         norm_embedding = torch.nn.functional.normalize(embedding, p=2, dim=1)
+        norm_embedding = norm_embedding.tolist()
         return norm_embedding
 
     def encode_batch(self, texts):
