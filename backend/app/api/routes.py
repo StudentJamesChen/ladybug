@@ -332,7 +332,7 @@ def store_embeddings_in_db(embeddings_document):
     """
     logger.debug("Storing embeddings in MongoDB.")
     try:
-        embeddings_collection.update_one(
+        db.get_embeddings_collection().update_one(
             {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
             {'$set': embeddings_document},
             upsert=True
@@ -354,7 +354,7 @@ def retrieve_sha_from_db(owner, repo_name):
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name} from MongoDB.")
     try:
-        existing_embedding = embeddings_collection.find_one(
+        existing_embedding = db.get_embeddings_collection().find_one(
             {'repo_name': repo_name, 'owner': owner},
             sort=[('stored_at', -1)]  # Get the latest record
         )
