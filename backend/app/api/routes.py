@@ -6,6 +6,7 @@ import shutil
 from flask import Blueprint, abort, request, jsonify
 from git import Repo, GitCommandError
 from datetime import datetime
+from stat import S_IWUSR, S_IREAD
 
 from services.fake_preprocess import Fake_preprocessor
 from database.database import Database
@@ -134,7 +135,6 @@ def process_and_store_embeddings(repo_info):
 
     clone_repo(repo_info['repo_url'], repo_dir)
 
-
     filtered_files = filter_files(repo_dir)
     for file in filtered_files:
         logger.info(f"Filtered file: {file}")
@@ -145,6 +145,7 @@ def process_and_store_embeddings(repo_info):
 
     # Preprocess the source code files
     preprocessed_files = preprocess_source_code(repo_dir)
+    
     for file in preprocessed_files:
         logger.info(f"Preprocessed file: {file}")
 
@@ -196,6 +197,7 @@ def clone_repo(repo_url, repo_dir):
 
     if os.path.exists(repo_dir):
         logger.info(f"Repository directory {repo_dir} exists. Purging for fresh clone.")
+        change_repository_file_permissions(repo_dir)
         shutil.rmtree(repo_dir)
 
     try:
@@ -227,6 +229,21 @@ def write_file_for_report_processing(repo_name, issue_content):
     except Exception as e:
         logger.error(f"Failed to write issue to file: {e}")
         raise
+
+def change_repository_file_permissions(repo_dir):
+    """
+    Changes the file permissions for all of the files in the repository directory, so that deletion can occur.
+    :param repo_dir: The path of the repository.
+    """
+
+    os.chmod(repo_dir, S_IWUSR|S_IREAD)
+    for root, dirs, files in os.walk(repo_dir):
+
+        for subdir in dirs:
+            os.chmod(os.path.join(root, subdir), S_IWUSR|S_IREAD)
+            
+        for file in files:
+            os.chmod(os.path.join(root, file), S_IWUSR|S_IREAD)
 
 
 def extract_and_validate_repo_info(data):
@@ -278,7 +295,7 @@ def store_embeddings(embeddings_document):
     """
     logger.debug("Storing embeddings.")
 
-    if db.USE_MONGODB:
+    if db.USE_DATABASE:
         try:
             store_embeddings_in_db(embeddings_document)
         except Exception:
@@ -288,7 +305,6 @@ def store_embeddings(embeddings_document):
             store_embeddings_in_file_database(embeddings_document)
         except Exception:
             abort(500, description="Failed to store embeddings in file.")
-
 
 def retrieve_stored_sha(owner, repo_name):
     """
