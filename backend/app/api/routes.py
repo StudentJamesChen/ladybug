@@ -16,10 +16,6 @@ from experimental_unixcoder.bug_localization import BugLocalization
 
 # Initialize Database
 db = Database()
-db.initialize_mongo()
-client = db.get_client()
-test_db = client.test
-embeddings_collection = test_db.embeddings
 
 # Initialize Blueprint for Routes
 routes = Blueprint('routes', __name__)
@@ -282,7 +278,7 @@ def store_embeddings(embeddings_document):
     """
     logger.debug("Storing embeddings.")
 
-    if db.USE_DATABASE:
+    if db.USE_MONGODB:
         try:
             store_embeddings_in_db(embeddings_document)
         except Exception:
@@ -304,7 +300,6 @@ def retrieve_stored_sha(owner, repo_name):
     :raises: Aborts the request with a 500 error if retrieval fails.
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name}.")
-
     try:
         if db.USE_DATABASE:
             stored_commit_sha = retrieve_sha_from_db(owner, repo_name)
@@ -337,7 +332,7 @@ def store_embeddings_in_db(embeddings_document):
     """
     logger.debug("Storing embeddings in MongoDB.")
     try:
-        embeddings_collection.update_one(
+        db.get_embeddings_collection().update_one(
             {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
             {'$set': embeddings_document},
             upsert=True
@@ -359,7 +354,7 @@ def retrieve_sha_from_db(owner, repo_name):
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name} from MongoDB.")
     try:
-        existing_embedding = embeddings_collection.find_one(
+        existing_embedding = db.get_embeddings_collection().find_one(
             {'repo_name': repo_name, 'owner': owner},
             sort=[('stored_at', -1)]  # Get the latest record
         )

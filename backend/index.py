@@ -1,14 +1,10 @@
-import logging
 import os
-from datetime import datetime
+import logging
 
+from flask import Flask, jsonify
 from dotenv import find_dotenv, load_dotenv
-from flask import Flask, abort, request, jsonify
-from git import Repo, GitCommandError
-from pymongo import MongoClient
 
 from app.api.routes import routes
-from services.fake_preprocess import Fake_preprocessor
 from database.database import Database
 
 # Load environment variables
