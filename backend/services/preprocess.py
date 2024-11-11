@@ -87,15 +87,15 @@ class Preprocessor:
         else:
             return wn.NOUN
         
-    def lematize_tokens(tokens):
+    def lemmatize_tokens(tokens):
         '''
         Lemmatizes a list of tokens with their POS tag
 
         Args:
-            tokens (list of strings): tokens to be lematized
+            tokens (list of strings): tokens to be lemmatized
         
         Returns:
-            tokens (list of strings): lematized tokens
+            tokens (list of strings): lemmatized tokens
         '''
         lemmatizer = WordNetLemmatizer()
 
