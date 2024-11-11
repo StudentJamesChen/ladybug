@@ -30,7 +30,7 @@ class Database:
         password = os.environ.get("MONGOPASSWORD")
 
         # Initialize client (or use local files if a connection to MongoDB can't be made)
-        self.USE_MONGODB = False
+        self.USE_DATABASE = False
         self.__initialize_database_client(password)
         self.__database = self.__client[database]
         self.__repos = self.__database[repo_collection]
@@ -49,7 +49,7 @@ class Database:
         try:
             client = MongoClient(connection_string)
             self.logger.info("Connected to MongoDB successfully.")
-            self.USE_MONGODB = True
+            self.USE_DATABASE = True
         except ConnectionFailure as e:
             self.logger.error(f"Could not connect to MongoDB: {e}")
         
@@ -74,7 +74,7 @@ class Database:
     def insert_embeddings_document(self, embeddings_document, **kwargs):
         self.logger.debug("Storing embeddings in database.")
 
-        if not self.USE_MONGODB:
+        if not self.USE_DATABASE:
             self.insert_embeddings_localdb(embeddings_document, kwargs)
             return
 
@@ -87,7 +87,7 @@ class Database:
     def retrive_repo_commit_sha(self, owner, repo_name, **kwargs):
         self.logger.debug(f"Retrieving stored SHA for {owner}/{repo_name}.")
 
-        if not self.USE_MONGODB:
+        if not self.USE_DATABASE:
             return self.retrive_repo_commit_sha_localdb(owner, repo_name)
         
         existing_embedding = self.__embeddings.find_one(
@@ -175,7 +175,7 @@ class Database:
         """
         self.logger.debug("Storing repository embeddings in database.")
 
-        if not self.USE_MONGODB:
+        if not self.USE_DATABASE:
             return
         
         filenames = []
