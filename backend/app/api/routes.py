@@ -12,13 +12,10 @@ from database.database import Database
 from services.preprocess_bug_report import preprocess_bug_report
 from services.preprocess_source_code import preprocess_source_code
 from services.filter import filter_files
+from experimental_unixcoder.bug_localization import BugLocalization
 
 # Initialize Database
 db = Database()
-db.initialize_mongo()
-client = db.get_client()
-test_db = client.test
-embeddings_collection = test_db.embeddings
 
 # Initialize Blueprint for Routes
 routes = Blueprint('routes', __name__)
@@ -26,6 +23,7 @@ routes = Blueprint('routes', __name__)
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+bug_localizer = BugLocalization()
 
 
 # ======================================================================================================================
@@ -176,10 +174,12 @@ def clean_embedding_paths_for_db(preprocessed_files, repo_dir):
     # This converts it into an easily printable form and removes the repo_dir prefix
     clean_files = []
     for file in preprocessed_files:
+        embedding_text = BugLocalization.encode_text(bug_localizer,file[2])
         clean_file = {
             'path': str(file[0]).replace(repo_dir + '/', ''),
             'name': file[1],
-            'content': file[2]
+            'content': file[2],
+            'embedding_text': embedding_text
         }
         clean_files.append(clean_file)
     return clean_files
@@ -278,7 +278,7 @@ def store_embeddings(embeddings_document):
     """
     logger.debug("Storing embeddings.")
 
-    if db.USE_DATABASE:
+    if db.USE_MONGODB:
         try:
             store_embeddings_in_db(embeddings_document)
         except Exception:
@@ -300,7 +300,6 @@ def retrieve_stored_sha(owner, repo_name):
     :raises: Aborts the request with a 500 error if retrieval fails.
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name}.")
-
     try:
         if db.USE_DATABASE:
             stored_commit_sha = retrieve_sha_from_db(owner, repo_name)
@@ -333,7 +332,7 @@ def store_embeddings_in_db(embeddings_document):
     """
     logger.debug("Storing embeddings in MongoDB.")
     try:
-        embeddings_collection.update_one(
+        db.get_embeddings_collection().update_one(
             {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
             {'$set': embeddings_document},
             upsert=True
@@ -355,7 +354,7 @@ def retrieve_sha_from_db(owner, repo_name):
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name} from MongoDB.")
     try:
-        existing_embedding = embeddings_collection.find_one(
+        existing_embedding = db.get_embeddings_collection().find_one(
             {'repo_name': repo_name, 'owner': owner},
             sort=[('stored_at', -1)]  # Get the latest record
         )
