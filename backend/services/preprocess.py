@@ -141,7 +141,7 @@ class Preprocessor:
         tokens = [token.lower() for token in tokens]
 
         # Lemmatize the tokens. i.e., running -> run
-        tokens = Preprocessor.lematize_tokens(tokens)
+        tokens = Preprocessor.lemmatize_tokens(tokens)
         
         # Remove short tokens
         tokens = [token for token in tokens if len(token) > 2]
@@ -149,7 +149,11 @@ class Preprocessor:
         # Join the tokens into a single string and remove cases
         preprocessed_text = " ".join(tokens)
 
+        bugLocalizer = BugLocalization()
+
+        print(preprocessed_text)
+
         # Calculate embeddings for preprocessed text
-        preprocessed_text = BugLocalization.encode_text(preprocessed_text)
+        preprocessed_text = bugLocalizer.encode_text(preprocessed_text)
 
         return preprocessed_text
