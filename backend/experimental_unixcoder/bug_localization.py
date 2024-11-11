@@ -1,6 +1,6 @@
 # https://github.com/microsoft/CodeBERT/blob/master/UniXcoder/README.md
 import torch
-from experimental_unixcoder.unixcoder import UniXcoder
+from unixcoder import UniXcoder
 
 class BugLocalization:
     def __init__(self):
@@ -26,28 +26,31 @@ class BugLocalization:
             embeddings.append(self.encode_text(text))
         return embeddings
 
-    # File Ranking for Bug Localization
     def rank_files(self, query_embedding, db_embeddings):
         """
         Ranks files based on similarity to the query embedding.
         
         Parameters:
-        - query_embedding: The embedding of the bug report or query.
+        - query_embedding: The embedding of the bug report or query (list or tensor).
         - db_embeddings: A list of tuples, where each tuple contains (file_id, embedding)
                          representing the file's unique identifier and its precomputed embedding.
                          
         Returns:
         - A sorted list of (file_id, similarity_score) tuples in descending order of similarity.
         """
-        # Normalize the query embedding
+        # Convert the query_embedding back to a tensor and normalize
+        query_embedding = torch.tensor(query_embedding, device=self.device)
         norm_query_embedding = torch.nn.functional.normalize(query_embedding, p=2, dim=1)
         
         # Calculate similarity scores
         similarities = []
         for file_id, embedding in db_embeddings:
-            # Ensure db_embedding is on the same device
-            db_embedding = embedding.to(self.device)
-            similarity = torch.einsum("ac,bc->ab", norm_query_embedding, db_embedding).item()
+            # Convert the embedding back to a tensor and ensure it's on the same device
+            db_embedding = torch.tensor(embedding, device=self.device)
+            norm_db_embedding = torch.nn.functional.normalize(db_embedding, p=2, dim=1)
+            
+            # Calculate similarity using dot product
+            similarity = torch.einsum("ac,bc->ab", norm_query_embedding, norm_db_embedding).item()
             similarities.append((file_id, similarity))
         
         # Sort files by similarity score in descending order
