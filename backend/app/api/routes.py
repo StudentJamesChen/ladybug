@@ -220,7 +220,7 @@ def extract_files(changed_files, zip_archive, repo_dir):
         for file_path in file_list:
             try:
                 zip_file_path = next((item for item in zip_archive.namelist() if item.endswith(file_path)), None)
-                if zip_file_path:
+                if file_path in changed_files['added'] or file_path in changed_files['modified'] and zip_file_path:
                     with zip_archive.open(zip_file_path) as file:
                         file_content = file.read().decode("utf-8")
                         extracted_files[file_path] = file_content
@@ -230,8 +230,6 @@ def extract_files(changed_files, zip_archive, repo_dir):
                         os.makedirs(os.path.dirname(output_path), exist_ok=True)  # Create subdirectories if needed
                         with open(output_path, "w", encoding="utf-8") as out_file:
                             out_file.write(file_content)
-                elif file_path in changed_files['removed']:
-                    print(f"File {file_path} not found in archive but has REMOVED status.")
             except KeyError:
                 print(f"File {file_path} not found in archive.")
 
