@@ -1,7 +1,10 @@
 import logging
 import os
 import json
+import requests
 import shutil
+import zipfile
+import io
 
 from flask import Blueprint, abort, request, jsonify
 from git import Repo, GitCommandError
@@ -104,7 +107,10 @@ def report():
     # Compute Bug Report Embeddings Here
 
     # Retrieve the stored SHA
-    stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
+    # stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
+
+    # TEST SHA - PLEASE REMOVE AFTER TESTING
+    stored_commit_sha = "c17e124348eda7ea26c60d407829ced0dbe0d9df"
 
     # Check if embeddings are up to date
     if stored_commit_sha == repo_info['latest_commit_sha']:
@@ -113,17 +119,122 @@ def report():
     else:
         logger.info('Embeddings are outdated. Recomputing embeddings.')
         try:
-            process_and_store_embeddings(repo_info)
+            changed_files = partial_clone(stored_commit_sha, repo_info)
         except Exception as e:
             logger.error(f"Failed to recompute embeddings: {e}")
             abort(500, description=str(e))
 
-        return jsonify({"message": "Embeddings recomputed and updated"}), 200
+        return jsonify({"message": "Changed files cloned onto server. STILL NEEDS TO BE PREPROCESSED, EMBEDDED, AND STORED"}), 200
+    
+    # Preprocess changed files
+
+    # Calculate embeddings of changed files
+
+    # Update database with embeddings
 
 
 # ======================================================================================================================
 # Helper Functions
 # ======================================================================================================================
+def partial_clone(old_sha, repo_info):
+    """
+    Clones the diff between two commits, applying pre-MVP filtering. Files are saved to the repos directory.
+
+    :param old_sha: The current SHA stored in the database
+    :param repo_info: Dictionary containing repository info
+    :return changed_files: Dictionary of changed files and their change type (added, modified, removed)
+    """
+    new_sha = repo_info['latest_commit_sha']
+
+    changed_files = get_changed_files(repo_info, old_sha, new_sha)
+    zip_archive = get_zip_archive(repo_info)
+
+    repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
+    extract_files(changed_files, zip_archive, repo_dir)
+
+    return changed_files
+
+def get_changed_files(repo_info, old_sha, new_sha):
+    """
+    Gets the diff between two commits and applies filtering.
+
+    :param old_sha: The current SHA stored in the database
+    :param new_sha: The SHA of the latest commit on GitHub
+    :param repo_info: Dictionary containing repository info
+    :return changed_files: Dictionary of changed files and their change type (added, modified, removed)
+    """
+    url = f"https://api.github.com/repos/{repo_info['owner']}/{repo_info['repo_name']}/compare/{old_sha}...{new_sha}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+        
+        # Check if 'files' key is present in response data
+        if 'files' in data:
+            files = data['files']
+            
+            # Filter files based on the `.java` extension
+            changed_files = {
+                "added": [f["filename"] for f in files if f["status"] == "added" and f["filename"].endswith(".java")],
+                "modified": [f["filename"] for f in files if f["status"] == "modified" and f["filename"].endswith(".java")],
+                "removed": [f["filename"] for f in files if f["status"] == "removed" and f["filename"].endswith(".java")]
+            }
+            
+            return changed_files
+        else:
+            print("Error: 'files' key not found in response data.")
+            return None
+    else:
+        print(f"Failed to fetch diff from GitHub. Status Code: {response.status_code}")
+        return None
+    
+def get_zip_archive(repo_info):
+    """
+    Fetches the zipfile of the repository at the latest commit
+
+    :param repo_info: Dictionary containing repository info
+    :return zip_archive: The zipfile of the repository at the latest commit
+    """
+    # Download repo at the latest commit
+    url = f"https://api.github.com/repos/{repo_info['owner']}/{repo_info['repo_name']}/zipball/{repo_info['latest_commit_sha']}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        zip_archive = zipfile.ZipFile(io.BytesIO(response.content))
+        return zip_archive
+    else:
+        print("Failed to download zip archive.")
+
+def extract_files(changed_files, zip_archive, repo_dir):
+    """
+    Extracts filtered source code files from a zipfile.
+
+    :param changed_files: Dictionary of changed files and their change type (added, modified, removed)
+    :param zip_archive: Zipfile of the repository at the latest commit
+    :param repo_dir: The directory of the repository.
+    """
+    os.makedirs(repo_dir, exist_ok=True)
+
+    extracted_files = {}
+    for change_type, file_list in changed_files.items():
+        for file_path in file_list:
+            try:
+                zip_file_path = next((item for item in zip_archive.namelist() if item.endswith(file_path)), None)
+                if zip_file_path:
+                    with zip_archive.open(zip_file_path) as file:
+                        file_content = file.read().decode("utf-8")
+                        extracted_files[file_path] = file_content
+                        
+                        # Write to output directory
+                        output_path = os.path.join(repo_dir, file_path)
+                        os.makedirs(os.path.dirname(output_path), exist_ok=True)  # Create subdirectories if needed
+                        with open(output_path, "w", encoding="utf-8") as out_file:
+                            out_file.write(file_content)
+                elif file_path in changed_files['removed']:
+                    print(f"File {file_path} not found in archive but has REMOVED status.")
+            except KeyError:
+                print(f"File {file_path} not found in archive.")
+
 
 def process_and_store_embeddings(repo_info):
     """
