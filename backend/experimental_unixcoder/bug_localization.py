@@ -12,28 +12,26 @@ class BugLocalization:
         self.model = UniXcoder("microsoft/unixcoder-base")
         self.model.to(self.device)
 
-    # Encoding for Long Texts
+        # Encoding for Long Texts
     def encode_text(self, text):
         """
-        Encodes long text by splitting it into chunks of max 512 tokens.
+        Encodes long text by splitting it into chunks of roughly 500 characters
+        (before tokenization). Each chunk is tokenized and encoded individually.
         Returns a list of embeddings (as lists), one for each chunk.
         """
-        # Tokenize the text
-        tokens = self.model.tokenize([text], mode="<encoder-only>")[0]
-        print(f"Total tokens in text: {len(tokens)}")  # Debug print
-
-        chunk_size = 512
+        chunk_size = 500  # Split by 500 characters as an example
         embeddings = []
 
-        # Process each chunk
-        for i in range(0, len(tokens), chunk_size):
-            chunk_tokens = tokens[i:i + chunk_size]
-            print(f"Processing chunk {i // chunk_size + 1}: tokens {i} to {i + chunk_size}")  # Debug print
+        # Split text into roughly 500-character chunks
+        for i in range(0, len(text), chunk_size):
+            text_chunk = text[i:i + chunk_size]
+            print(f"Processing text chunk {i // chunk_size + 1}")  # Debug print
+
+            # Tokenize the chunk
+            tokens = self.model.tokenize([text_chunk], mode="<encoder-only>")[0]
+            source_ids = torch.tensor([tokens]).to(self.device)
             
-            # Convert chunk tokens to tensor
-            source_ids = torch.tensor([chunk_tokens]).to(self.device)
-            
-            # Get model output (adjust if model's output format differs)
+            # Get model output
             try:
                 _, embedding = self.model(source_ids)
                 norm_embedding = torch.nn.functional.normalize(embedding, p=2, dim=1)
