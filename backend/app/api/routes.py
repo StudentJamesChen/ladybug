@@ -174,12 +174,10 @@ def clean_embedding_paths_for_db(preprocessed_files, repo_dir):
     # This converts it into an easily printable form and removes the repo_dir prefix
     clean_files = []
     for file in preprocessed_files:
-        embedding_text = BugLocalization.encode_text(bug_localizer,file[2])
         clean_file = {
             'path': str(file[0]).replace(repo_dir + '/', ''),
             'name': file[1],
-            'content': file[2],
-            'embedding_text': embedding_text
+            'embedding_text': file[2]
         }
         clean_files.append(clean_file)
     return clean_files
