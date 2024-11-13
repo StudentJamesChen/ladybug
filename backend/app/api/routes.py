@@ -296,24 +296,32 @@ def process_and_store_embeddings(repo_info):
 
     # Preprocess the source code files
     preprocessed_files = preprocess_source_code(repo_dir)
-    
     for file in preprocessed_files:
         logger.info(f"Preprocessed file: {file}")
 
-    # Store embeddings
+    # Clean data
     clean_paths = clean_embedding_paths_for_db(preprocessed_files, repo_dir)
-    embeddings_document = {
+
+    # Create repo document
+    repo_document = {
         'repo_name': repo_info['repo_name'],
         'owner': repo_info['owner'],
         'commit_sha': repo_info['latest_commit_sha'],
-        'embeddings': clean_paths,
         'stored_at': datetime.utcnow().isoformat() + 'Z'
     }
-    store_embeddings(embeddings_document)
 
-    # Delete the repo directory after processing
-    # shutil.rmtree(repo_dir)
-    # logger.info(f"Deleted repository directory: {repo_dir}")
+    # Create embedddings documents
+    code_file_documents = [
+        {
+            'route': file['path'],
+            'embedding': file['embedding_text'],
+            'last_updated': datetime.utcnow().isoformat() + 'Z'
+        }
+        for file in clean_paths
+    ]
+
+    # Store repo and embeddings
+    send_initialized_data_to_db(repo_document, code_file_documents)
 
 def clean_embedding_paths_for_db(preprocessed_files, repo_dir):
     """
@@ -436,26 +444,39 @@ def extract_and_validate_repo_info(data):
 # ======================================================================================================================
 # Handler Methods
 # ======================================================================================================================
-
-def store_embeddings(embeddings_document):
+def send_initialized_data_to_db(repo_info, code_files):
     """
-    Stores the embeddings document in the database or local file.
+    Stores the repo document in the 'repos' collection and each code file document in the 'code_files' collection.
 
-    :param embeddings_document: The embeddings data to store.
-    :raises: Aborts the request with a 500 error if storage fails.
+    :param repo_info: Repository metadata to store in 'repos' collection.
+    :param code_files: List of code files with embeddings to store in 'code_files' collection.
+    :raises: Exception if storage fails.
     """
-    logger.debug("Storing embeddings.")
+    logger.debug("Storing repo information and embeddings in MongoDB.")
 
-    if db.USE_DATABASE:
-        try:
-            store_embeddings_in_db(embeddings_document)
-        except Exception:
-            abort(500, description="Failed to store embeddings in database.")
-    else:
-        try:
-            store_embeddings_in_file_database(embeddings_document)
-        except Exception:
-            abort(500, description="Failed to store embeddings in file.")
+    try:
+        # Insert or update the repository information in 'repos' collection
+        repo_id = db.get_repo_collection().update_one(
+            {'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']},
+            {'$set': repo_info},
+            upsert=True
+        ).upserted_id
+
+        # Use the repository `_id` (repo_id) as a foreign key in `code_files` collection
+        for file_info in code_files:
+            file_info['repo_id'] = repo_id  # Add the repo_id reference to each code file document
+
+            # Insert or update each code file's embedding in 'code_files' collection
+            db.get_embeddings_collection().update_one(
+                {'repo_id': repo_id, 'route': file_info['route']},
+                {'$set': file_info},
+                upsert=True
+            )
+
+        logger.info('Repo and code file embeddings stored in database successfully.')
+    except Exception as e:
+        logger.error(f"Failed to store embeddings in database: {e}")
+        raise
 
 def retrieve_stored_sha(owner, repo_name):
     """
@@ -489,26 +510,6 @@ def retrieve_stored_sha(owner, repo_name):
 # ======================================================================================================================
 # Live Database (MongoDB) Methods
 # ======================================================================================================================
-
-def store_embeddings_in_db(embeddings_document):
-    """
-    Stores the embeddings document in the MongoDB database.
-
-    :param embeddings_document: The embeddings data to store.
-    :raises: Exception if storage fails.
-    """
-    logger.debug("Storing embeddings in MongoDB.")
-    try:
-        db.get_embeddings_collection().update_one(
-            {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
-            {'$set': embeddings_document},
-            upsert=True
-        )
-        logger.info('Embeddings stored in database successfully.')
-    except Exception as e:
-        logger.error(f"Failed to store embeddings in database: {e}")
-        raise
-
 
 def retrieve_sha_from_db(owner, repo_name):
     """
