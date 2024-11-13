@@ -4,6 +4,7 @@
  */
 
 import {sendRepo} from './components/sendRepo.js';
+import {sendRatings} from './components/sendRatings.js';
 import axios from "axios";
 
 
@@ -67,6 +68,56 @@ export default (app) => {
 
 		console.log(`Issue #${issue.number} opened in repository ${repository.full_name}`);
 
+		const issueAuthor = issue.user;
+		if (issueAuthor.type === 'Bot') {
+			console.log(`Issue #${issue.number} opened by a bot (${issueAuthor.login}). Ignoring.`);
+			return; // Exit early if the issue was opened by a bot
+		}
+
+		let issueCommentBody = 'Thank you for opening this issue!';
+
+		const issueBody = issue.body;
+		if (issueBody) {
+			const imageRegex = /https?:\/\/[^\s)\]]+/g;
+			const imageUrls = issueBody.match(imageRegex);
+
+			if (imageUrls && imageUrls.length > 0) {
+				issueCommentBody += ' I found the following images in the issue description:';
+				imageUrls.forEach((imageUrl) => {
+					issueCommentBody += `\n\n![Image](${imageUrl})`;
+				});
+			} else {
+				issueCommentBody += ' I did not find any images in the issue description.';
+			}
+		}
+
+		try {
+			// Check if the bot already commented
+			const comments = await context.octokit.issues.listComments(context.issue());
+			const botComment = comments.data.find(
+				(comment) => comment.user.type === 'Bot' && comment.body.includes('Thank you for opening this issue!')
+			);
+
+			if (botComment) {
+				const updatedCommentBody = 'EDIT: The bug report was updated.\n\n' + issueCommentBody;
+
+				console.log('Editing comment with ID:', botComment.id);
+				await context.octokit.issues.updateComment({
+					...context.issue(),
+					comment_id: botComment.id,
+					body: updatedCommentBody,
+				});
+			} else {
+				// No bot comment exists, create a new one
+				const issueComment = context.issue({body: issueCommentBody});
+
+				console.log('Creating comment:', issueCommentBody);
+				await context.octokit.issues.createComment(issueComment);
+			}
+		} catch (error) {
+			console.error('Error handling issue comments:', error);
+		}
+
 		try {
 			// Fetch the full repository data to ensure all necessary fields are present
 			const {data: fullRepo} = await context.octokit.repos.get({
@@ -77,8 +128,8 @@ export default (app) => {
 			// Pass the full repository object and context to sendRepo
 			const repoData = await sendRepo(fullRepo, context);
 			const fullData = {
-				repository: repoData,
 				issue: issue.body || issue.title,
+				repository: repoData,
 			};
 
 			if (!fullData) {
@@ -93,63 +144,16 @@ export default (app) => {
 					if (flaskResponse.status !== 200) {
 						throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
 					}
+
 					console.log('Repo info sent to Flask backend successfully from issues.opened event.');
+					sendRatings(flaskResponse.data, context);
+
 				} catch (error) {
 					console.error('Error while sending repo info from issues.opened:', error);
 				}
 			}
 		} catch (error) {
 			console.error(`Failed to fetch repository data for ${repository.full_name}:`, error);
-		}
-
-		// Existing logic for handling issue comments
-		const issueBody = issue.body;
-		const issueAuthor = issue.user;
-		if (issueAuthor.type === 'Bot') {
-			console.log(`Issue #${issue.number} opened by a bot (${issueAuthor.login}). Ignoring.`);
-			return; // Exit early if the issue was opened by a bot
-		}
-
-		let issueCommentBody = 'Thank you for opening this issue!';
-		if (issueBody) {
-			const imageRegex = /https?:\/\/[^\s)\]]+/g;
-			const imageUrls = issueBody.match(imageRegex);
-
-			if (imageUrls) {
-				issueCommentBody += ' I found the following images in the issue description:';
-				imageUrls.forEach((imageUrl) => {
-					issueCommentBody += `\n\n![Image](${imageUrl})`;
-				});
-			} else {
-				issueCommentBody += ' I did not find any images in the issue description.';
-			}
-
-			try {
-				// Check if the bot already commented
-				const comments = await context.octokit.issues.listComments(context.issue());
-				const botComment = comments.data.find(
-					(comment) => comment.user.type === 'Bot' && comment.body.includes('I found the following images')
-				);
-
-				if (botComment) {
-					const updatedCommentBody = 'EDIT: The bug report was updated.\n\n' + issueCommentBody;
-
-					console.log('Editing comment with ID:', botComment.id);
-					await context.octokit.issues.updateComment({
-						...context.issue(),
-						comment_id: botComment.id,
-						body: updatedCommentBody,
-					});
-				} else {
-					// No bot comment exists, create a new one
-					const issueComment = context.issue({body: issueCommentBody});
-
-					console.log('Creating comment:', issueCommentBody);
-					await context.octokit.issues.createComment(issueComment);
-				}
-			} catch (error) {
-				console.error('Error handling issue comments:', error);
-			}
 		}
 	});
 
