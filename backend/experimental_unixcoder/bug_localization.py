@@ -1,8 +1,10 @@
 import torch
-# needs absolute path to work with others
 
-# from experimental_unixcoder.unixcoder import UniXcoder # uncomment when live
-from unixcoder import UniXcoder # uncomment when testing
+try:
+    from experimental_unixcoder.unixcoder import UniXcoder  # Try live version
+except ImportError:
+    from unixcoder import UniXcoder  # Fallback to testing version
+
 
 class BugLocalization:
     def __init__(self):
@@ -85,7 +87,7 @@ if __name__ == "__main__":
     bug_localizer = BugLocalization()
     
     # Example bug report text (long text)
-    sample_text = "Your long bug report text that exceeds 512 tokens..."
+    sample_text = "Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens...Your long bug report text that exceeds 512 tokens..."
     print("Encoding bug report for bug localization...")
     query_embeddings = bug_localizer.encode_text(sample_text)
     
@@ -94,9 +96,9 @@ if __name__ == "__main__":
     file2_text = "Contents of file 2 that is over 512 tokens..."
     
     file1_embeddings = bug_localizer.encode_text(file1_text)
-    print(file1_embeddings)
+    # print(file1_embeddings)
     file2_embeddings = bug_localizer.encode_text(file2_text)
-    print(file2_embeddings)
+    # print(file2_embeddings)
     
     # Prepare data for MongoDB storage (embeddings as lists)
     db_embeddings = [
