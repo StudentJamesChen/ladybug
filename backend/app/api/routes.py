@@ -104,7 +104,7 @@ def report():
         logger.error(f"Failed to preprocess bug report: {e}")
         abort(500, description="Failed to preprocess bug report")
 
-    # Compute Bug Report Embeddings Here
+    # COMPUTE BUG REPORT EMBEDDINGS
 
     # Retrieve the stored SHA
     stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
@@ -116,17 +116,20 @@ def report():
         logger.info('Embeddings are outdated. Recomputing embeddings.')
         try:
             changed_files = partial_clone(stored_commit_sha, repo_info)
+
+            # DARREN WIP
+            # process_and_patch_embeddings(changed_files, repo_info)
         except Exception as e:
             logger.error(f"Failed to recompute embeddings: {e}")
             abort(500, description=str(e))
 
-    # Preprocess changed files
-    # Calculate embeddings of changed files
-    # Update database with embeddings
-    process_and_patch_embeddings(changed_files, repo_info)
+    # FETCH ALL EMBEDDINGS FROM DB
 
-    # BUG LOCALIZATION
+    # RUN BUG LOCALIZATION
 
+    # FORMAT RANKINGS?
+
+    # SEND RESPONSE TO PROBOT
     return jsonify({"message": "Embeddings computed and stored"}), 200
 
 
