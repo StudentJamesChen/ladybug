@@ -112,16 +112,16 @@ def report():
     if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
         return jsonify({"message": "Embeddings are up to date"}), 200
-    else:
-        logger.info('Embeddings are outdated. Recomputing embeddings.')
-        try:
-            changed_files = partial_clone(stored_commit_sha, repo_info)
-
-            # DARREN WIP
-            # process_and_patch_embeddings(changed_files, repo_info)
-        except Exception as e:
-            logger.error(f"Failed to recompute embeddings: {e}")
-            abort(500, description=str(e))
+    # else:
+    #     logger.info('Embeddings are outdated. Recomputing embeddings.')
+    #     try:
+    #         changed_files = partial_clone(stored_commit_sha, repo_info)
+    #
+    #         # DARREN WIP
+    #         # process_and_patch_embeddings(changed_files, repo_info)
+    #     except Exception as e:
+    #         logger.error(f"Failed to recompute embeddings: {e}")
+    #         abort(500, description=str(e))
 
     # FETCH ALL EMBEDDINGS FROM DB
 
@@ -130,7 +130,7 @@ def report():
     # FORMAT RANKINGS?
 
     # SEND RESPONSE TO PROBOT
-    return jsonify({"message": "Embeddings computed and stored"}), 200
+    return jsonify({"message": "Embeddings computed and stored", "preprocessed_bug_report": preprocessed_bug_report}), 200
 
 
 # ======================================================================================================================
