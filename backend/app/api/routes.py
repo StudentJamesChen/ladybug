@@ -107,11 +107,7 @@ def report():
     # Compute Bug Report Embeddings Here
 
     # Retrieve the stored SHA
-    # stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
-
-    # TEST SHA - PLEASE REMOVE AFTER TESTING
-    stored_commit_sha = "c17e124348eda7ea26c60d407829ced0dbe0d9df"
-
+    stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
     # Check if embeddings are up to date
     if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
