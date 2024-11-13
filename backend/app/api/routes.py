@@ -1,7 +1,10 @@
 import logging
 import os
 import json
+import requests
 import shutil
+import zipfile
+import io
 
 from flask import Blueprint, abort, request, jsonify
 from git import Repo, GitCommandError
@@ -101,11 +104,10 @@ def report():
         logger.error(f"Failed to preprocess bug report: {e}")
         abort(500, description="Failed to preprocess bug report")
 
-    # Compute Bug Report Embeddings Here
+    # COMPUTE BUG REPORT EMBEDDINGS
 
     # Retrieve the stored SHA
     stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
-
     # Check if embeddings are up to date
     if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
@@ -113,17 +115,169 @@ def report():
     else:
         logger.info('Embeddings are outdated. Recomputing embeddings.')
         try:
-            process_and_store_embeddings(repo_info)
+            changed_files = partial_clone(stored_commit_sha, repo_info)
+
+            # DARREN WIP
+            # process_and_patch_embeddings(changed_files, repo_info)
         except Exception as e:
             logger.error(f"Failed to recompute embeddings: {e}")
             abort(500, description=str(e))
 
-        return jsonify({"message": "Embeddings recomputed and updated"}), 200
+    # FETCH ALL EMBEDDINGS FROM DB
+
+    # RUN BUG LOCALIZATION
+
+    # FORMAT RANKINGS?
+
+    # SEND RESPONSE TO PROBOT
+    return jsonify({"message": "Embeddings computed and stored"}), 200
 
 
 # ======================================================================================================================
 # Helper Functions
 # ======================================================================================================================
+def partial_clone(old_sha, repo_info):
+    """
+    Clones the diff between two commits, applying pre-MVP filtering. Files are saved to the repos directory.
+
+    :param old_sha: The current SHA stored in the database
+    :param repo_info: Dictionary containing repository info
+    :return changed_files: Dictionary of changed files and their change type (added, modified, removed)
+    """
+    new_sha = repo_info['latest_commit_sha']
+
+    changed_files = get_changed_files(repo_info, old_sha, new_sha)
+    zip_archive = get_zip_archive(repo_info)
+
+    repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
+    extract_files(changed_files, zip_archive, repo_dir)
+
+    return changed_files
+
+def get_changed_files(repo_info, old_sha, new_sha):
+    """
+    Gets the diff between two commits and applies filtering.
+
+    :param old_sha: The current SHA stored in the database
+    :param new_sha: The SHA of the latest commit on GitHub
+    :param repo_info: Dictionary containing repository info
+    :return changed_files: Dictionary of changed files and their change type (added, modified, removed)
+    """
+    url = f"https://api.github.com/repos/{repo_info['owner']}/{repo_info['repo_name']}/compare/{old_sha}...{new_sha}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+        
+        # Check if 'files' key is present in response data
+        if 'files' in data:
+            files = data['files']
+            
+            # Filter files based on the `.java` extension
+            changed_files = {
+                "added": [f["filename"] for f in files if f["status"] == "added" and f["filename"].endswith(".java")],
+                "modified": [f["filename"] for f in files if f["status"] == "modified" and f["filename"].endswith(".java")],
+                "removed": [f["filename"] for f in files if f["status"] == "removed" and f["filename"].endswith(".java")]
+            }
+            
+            return changed_files
+        else:
+            print("Error: 'files' key not found in response data.")
+            return None
+    else:
+        print(f"Failed to fetch diff from GitHub. Status Code: {response.status_code}")
+        return None
+    
+def get_zip_archive(repo_info):
+    """
+    Fetches the zipfile of the repository at the latest commit
+
+    :param repo_info: Dictionary containing repository info
+    :return zip_archive: The zipfile of the repository at the latest commit
+    """
+    # Download repo at the latest commit
+    url = f"https://api.github.com/repos/{repo_info['owner']}/{repo_info['repo_name']}/zipball/{repo_info['latest_commit_sha']}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        zip_archive = zipfile.ZipFile(io.BytesIO(response.content))
+        return zip_archive
+    else:
+        print("Failed to download zip archive.")
+
+def extract_files(changed_files, zip_archive, repo_dir):
+    """
+    Extracts filtered source code files from a zipfile.
+
+    :param changed_files: Dictionary of changed files and their change type (added, modified, removed)
+    :param zip_archive: Zipfile of the repository at the latest commit
+    :param repo_dir: The directory of the repository.
+    """
+    os.makedirs(repo_dir, exist_ok=True)
+
+    extracted_files = {}
+    for change_type, file_list in changed_files.items():
+        for file_path in file_list:
+            try:
+                zip_file_path = next((item for item in zip_archive.namelist() if item.endswith(file_path)), None)
+                if file_path in changed_files['added'] or file_path in changed_files['modified'] and zip_file_path:
+                    with zip_archive.open(zip_file_path) as file:
+                        file_content = file.read().decode("utf-8")
+                        extracted_files[file_path] = file_content
+                        
+                        # Write to output directory
+                        output_path = os.path.join(repo_dir, file_path)
+                        os.makedirs(os.path.dirname(output_path), exist_ok=True)  # Create subdirectories if needed
+                        with open(output_path, "w", encoding="utf-8") as out_file:
+                            out_file.write(file_content)
+            except KeyError:
+                print(f"File {file_path} not found in archive.")
+
+def process_and_patch_embeddings(changed_files, repo_info):
+    """
+    Processes the repository by cloning, computing embeddings, and storing them. Always performs a fresh setup.
+
+    :param repo_info: Dictionary containing repository information.
+    """
+    repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
+
+    # Preprocess the changed source code files
+    preprocessed_files = preprocess_source_code(repo_dir)
+    
+    for file in preprocessed_files:
+        logger.info(f"Preprocessed changed file: {file}")
+
+    # Store embeddings
+    clean_files = clean_embedding_paths_for_db(preprocessed_files, repo_dir)
+
+    update_embeddings_in_db(changed_files, clean_files, repo_dir)
+
+def update_embeddings_in_db(changed_files, clean_files, repo_dir):
+    # 1. Process "added" and "modified" files for insertion or update
+    for clean_file in clean_files:
+        # Extract the relevant information from each clean_file dictionary
+        file_path = clean_file['path']
+        embedding = clean_file['embedding_text']
+
+        # Upsert (update if exists, insert if not)
+        db.get_embeddings_collection().update_one(
+            {"path": file_path},  # Use `path` as the unique identifier
+            {
+                "$set": {
+                    "name": clean_file['name'],
+                    "content": clean_file['content'],
+                    "embedding_text": embedding,
+                }
+            },
+            upsert=True
+        )
+
+    # 2. Delete Embeddings for "removed" files
+    for file_path in changed_files.get("removed", []):
+        file_path.replace(repo_dir + '/', '')
+        db.get_embeddings_collection().delete_one({"path": file_path})
+
+    print("Database updated successfully.")
 
 def process_and_store_embeddings(repo_info):
     """
@@ -145,24 +299,32 @@ def process_and_store_embeddings(repo_info):
 
     # Preprocess the source code files
     preprocessed_files = preprocess_source_code(repo_dir)
-    
     for file in preprocessed_files:
         logger.info(f"Preprocessed file: {file}")
 
-    # Store embeddings
+    # Clean data
     clean_paths = clean_embedding_paths_for_db(preprocessed_files, repo_dir)
-    embeddings_document = {
+
+    # Create repo document
+    repo_document = {
         'repo_name': repo_info['repo_name'],
         'owner': repo_info['owner'],
         'commit_sha': repo_info['latest_commit_sha'],
-        'embeddings': clean_paths,
         'stored_at': datetime.utcnow().isoformat() + 'Z'
     }
-    store_embeddings(embeddings_document)
 
-    # Delete the repo directory after processing
-    # shutil.rmtree(repo_dir)
-    # logger.info(f"Deleted repository directory: {repo_dir}")
+    # Create embedddings documents
+    code_file_documents = [
+        {
+            'route': file['path'],
+            'embedding': file['embedding_text'],
+            'last_updated': datetime.utcnow().isoformat() + 'Z'
+        }
+        for file in clean_paths
+    ]
+
+    # Store repo and embeddings
+    send_initialized_data_to_db(repo_document, code_file_documents)
 
 def clean_embedding_paths_for_db(preprocessed_files, repo_dir):
     """
@@ -283,26 +445,39 @@ def extract_and_validate_repo_info(data):
 # ======================================================================================================================
 # Handler Methods
 # ======================================================================================================================
-
-def store_embeddings(embeddings_document):
+def send_initialized_data_to_db(repo_info, code_files):
     """
-    Stores the embeddings document in the database or local file.
+    Stores the repo document in the 'repos' collection and each code file document in the 'code_files' collection.
 
-    :param embeddings_document: The embeddings data to store.
-    :raises: Aborts the request with a 500 error if storage fails.
+    :param repo_info: Repository metadata to store in 'repos' collection.
+    :param code_files: List of code files with embeddings to store in 'code_files' collection.
+    :raises: Exception if storage fails.
     """
-    logger.debug("Storing embeddings.")
+    logger.debug("Storing repo information and embeddings in MongoDB.")
 
-    if db.USE_DATABASE:
-        try:
-            store_embeddings_in_db(embeddings_document)
-        except Exception:
-            abort(500, description="Failed to store embeddings in database.")
-    else:
-        try:
-            store_embeddings_in_file_database(embeddings_document)
-        except Exception:
-            abort(500, description="Failed to store embeddings in file.")
+    try:
+        # Insert or update the repository information in 'repos' collection
+        repo_id = db.get_repo_collection().update_one(
+            {'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']},
+            {'$set': repo_info},
+            upsert=True
+        ).upserted_id
+
+        # Use the repository `_id` (repo_id) as a foreign key in `code_files` collection
+        for file_info in code_files:
+            file_info['repo_id'] = repo_id  # Add the repo_id reference to each code file document
+
+            # Insert or update each code file's embedding in 'code_files' collection
+            db.get_embeddings_collection().update_one(
+                {'repo_id': repo_id, 'route': file_info['route']},
+                {'$set': file_info},
+                upsert=True
+            )
+
+        logger.info('Repo and code file embeddings stored in database successfully.')
+    except Exception as e:
+        logger.error(f"Failed to store embeddings in database: {e}")
+        raise
 
 def retrieve_stored_sha(owner, repo_name):
     """
@@ -336,26 +511,6 @@ def retrieve_stored_sha(owner, repo_name):
 # ======================================================================================================================
 # Live Database (MongoDB) Methods
 # ======================================================================================================================
-
-def store_embeddings_in_db(embeddings_document):
-    """
-    Stores the embeddings document in the MongoDB database.
-
-    :param embeddings_document: The embeddings data to store.
-    :raises: Exception if storage fails.
-    """
-    logger.debug("Storing embeddings in MongoDB.")
-    try:
-        db.get_embeddings_collection().update_one(
-            {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
-            {'$set': embeddings_document},
-            upsert=True
-        )
-        logger.info('Embeddings stored in database successfully.')
-    except Exception as e:
-        logger.error(f"Failed to store embeddings in database: {e}")
-        raise
-
 
 def retrieve_sha_from_db(owner, repo_name):
     """
