@@ -107,10 +107,7 @@ def report():
     # Compute Bug Report Embeddings Here
 
     # Retrieve the stored SHA
-    # stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
-
-    # TEST SHA - PLEASE REMOVE AFTER TESTING
-    stored_commit_sha = "c17e124348eda7ea26c60d407829ced0dbe0d9df"
+    stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
 
     # Check if embeddings are up to date
     if stored_commit_sha == repo_info['latest_commit_sha']:
@@ -124,13 +121,14 @@ def report():
             logger.error(f"Failed to recompute embeddings: {e}")
             abort(500, description=str(e))
 
-        return jsonify({"message": "Changed files cloned onto server. STILL NEEDS TO BE PREPROCESSED, EMBEDDED, AND STORED"}), 200
-    
     # Preprocess changed files
-
     # Calculate embeddings of changed files
-
     # Update database with embeddings
+    process_and_patch_embeddings(changed_files, repo_info)
+
+    # BUG LOCALIZATION
+
+    return jsonify({"message": "Embeddings computed and stored"}), 200
 
 
 # ======================================================================================================================
@@ -233,6 +231,51 @@ def extract_files(changed_files, zip_archive, repo_dir):
             except KeyError:
                 print(f"File {file_path} not found in archive.")
 
+def process_and_patch_embeddings(changed_files, repo_info):
+    """
+    Processes the repository by cloning, computing embeddings, and storing them. Always performs a fresh setup.
+
+    :param repo_info: Dictionary containing repository information.
+    """
+    repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
+
+    # Preprocess the changed source code files
+    preprocessed_files = preprocess_source_code(repo_dir)
+    
+    for file in preprocessed_files:
+        logger.info(f"Preprocessed changed file: {file}")
+
+    # Store embeddings
+    clean_files = clean_embedding_paths_for_db(preprocessed_files, repo_dir)
+
+    update_embeddings_in_db(changed_files, clean_files, repo_dir)
+
+def update_embeddings_in_db(changed_files, clean_files, repo_dir):
+    # 1. Process "added" and "modified" files for insertion or update
+    for clean_file in clean_files:
+        # Extract the relevant information from each clean_file dictionary
+        file_path = clean_file['path']
+        embedding = clean_file['embedding_text']
+
+        # Upsert (update if exists, insert if not)
+        db.get_embeddings_collection().update_one(
+            {"path": file_path},  # Use `path` as the unique identifier
+            {
+                "$set": {
+                    "name": clean_file['name'],
+                    "content": clean_file['content'],
+                    "embedding_text": embedding,
+                }
+            },
+            upsert=True
+        )
+
+    # 2. Delete Embeddings for "removed" files
+    for file_path in changed_files.get("removed", []):
+        file_path.replace(repo_dir + '/', '')
+        db.get_embeddings_collection().delete_one({"path": file_path})
+
+    print("Database updated successfully.")
 
 def process_and_store_embeddings(repo_info):
     """
