@@ -60,7 +60,7 @@ export default (app) => {
 	});
 
 
-// Handler for issues.opened event
+	// Handler for issues.opened event
 	app.on('issues.opened', async (context) => {
 		const issue = context.payload.issue;
 		const repository = context.payload.repository;
@@ -77,15 +77,15 @@ export default (app) => {
 			// Pass the full repository object and context to sendRepo
 			const repoData = await sendRepo(fullRepo, context);
 			const fullData = {
-				issue: issue,
-				repository: fullRepo,
+				repository: repoData,
+				issue: issue.body || issue.title,
 			};
 
 			if (!fullData) {
 				console.error(`sendRepo returned null for ${repository.full_name}. Skipping Axios POST.`);
 			} else {
 				try {
-					const flaskResponse = await axios.post('http://localhost:5000/initialization', fullData, {
+					const flaskResponse = await axios.post('http://localhost:5000/report', fullData, {
 						headers: {
 							'Content-Type': 'application/json',
 						},
