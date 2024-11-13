@@ -1,4 +1,5 @@
 from pathlib import Path
+from stat import S_IWUSR, S_IREAD
 
 def filter_files(repo_path: str):
     """
@@ -24,6 +25,7 @@ def filter_files(repo_path: str):
     for file in repo.rglob("*"):
         if file.is_file():
             # Remove hidden files
+            file.chmod(S_IWUSR | S_IREAD)
             if file.name.startswith('.'):
                 file.unlink()
             # Add Java files to list

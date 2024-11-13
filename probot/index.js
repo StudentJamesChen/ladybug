@@ -4,6 +4,7 @@
  */
 
 import {sendRepo} from './components/sendRepo.js';
+import {sendRatings} from './components/sendRatings.js';
 import axios from "axios";
 
 
@@ -67,41 +68,6 @@ export default (app) => {
 
 		console.log(`Issue #${issue.number} opened in repository ${repository.full_name}`);
 
-		try {
-			// Fetch the full repository data to ensure all necessary fields are present
-			const {data: fullRepo} = await context.octokit.repos.get({
-				owner: repository.owner.login,
-				repo: repository.name,
-			});
-
-			// Pass the full repository object and context to sendRepo
-			const repoData = await sendRepo(fullRepo, context);
-			const fullData = {
-				issue: issue,
-				repository: fullRepo,
-			};
-
-			if (!fullData) {
-				console.error(`sendRepo returned null for ${repository.full_name}. Skipping Axios POST.`);
-			} else {
-				try {
-					const flaskResponse = await axios.post('http://localhost:5000/initialization', fullData, {
-						headers: {
-							'Content-Type': 'application/json',
-						},
-					});
-					if (flaskResponse.status !== 200) {
-						throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
-					}
-					console.log('Repo info sent to Flask backend successfully from issues.opened event.');
-				} catch (error) {
-					console.error('Error while sending repo info from issues.opened:', error);
-				}
-			}
-		} catch (error) {
-			console.error(`Failed to fetch repository data for ${repository.full_name}:`, error);
-		}
-
 		// Existing logic for handling issue comments
 		const issueBody = issue.body;
 		const issueAuthor = issue.user;
@@ -150,6 +116,44 @@ export default (app) => {
 			} catch (error) {
 				console.error('Error handling issue comments:', error);
 			}
+		}
+
+        try {
+			// Fetch the full repository data to ensure all necessary fields are present
+			const {data: fullRepo} = await context.octokit.repos.get({
+				owner: repository.owner.login,
+				repo: repository.name,
+			});
+
+			// Pass the full repository object and context to sendRepo
+			const repoData = await sendRepo(fullRepo, context);
+			const fullData = {
+				issue: issue.body || issue.title,
+				repository: repoData,
+			};
+
+			if (!fullData) {
+				console.error(`sendRepo returned null for ${repository.full_name}. Skipping Axios POST.`);
+			} else {
+				try {
+					const flaskResponse = await axios.post('http://localhost:5000/report', fullData, {
+						headers: {
+							'Content-Type': 'application/json',
+						},
+					});
+					if (flaskResponse.status !== 200) {
+						throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
+					}
+
+					console.log('Repo info sent to Flask backend successfully from issues.opened event.');
+                    sendRatings(flaskResponse.data, context);
+
+				} catch (error) {
+					console.error('Error while sending repo info from issues.opened:', error);
+				}
+			}
+		} catch (error) {
+			console.error(`Failed to fetch repository data for ${repository.full_name}:`, error);
 		}
 	});
 

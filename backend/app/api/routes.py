@@ -6,6 +6,7 @@ import shutil
 from flask import Blueprint, abort, request, jsonify
 from git import Repo, GitCommandError
 from datetime import datetime
+from stat import S_IWUSR, S_IREAD
 
 from services.fake_preprocess import Fake_preprocessor
 from database.database import Database
@@ -16,10 +17,6 @@ from experimental_unixcoder.bug_localization import BugLocalization
 
 # Initialize Database
 db = Database()
-db.initialize_mongo()
-client = db.get_client()
-test_db = client.test
-embeddings_collection = test_db.embeddings
 
 # Initialize Blueprint for Routes
 routes = Blueprint('routes', __name__)
@@ -138,7 +135,6 @@ def process_and_store_embeddings(repo_info):
 
     clone_repo(repo_info['repo_url'], repo_dir)
 
-
     filtered_files = filter_files(repo_dir)
     for file in filtered_files:
         logger.info(f"Filtered file: {file}")
@@ -149,6 +145,7 @@ def process_and_store_embeddings(repo_info):
 
     # Preprocess the source code files
     preprocessed_files = preprocess_source_code(repo_dir)
+    
     for file in preprocessed_files:
         logger.info(f"Preprocessed file: {file}")
 
@@ -200,6 +197,7 @@ def clone_repo(repo_url, repo_dir):
 
     if os.path.exists(repo_dir):
         logger.info(f"Repository directory {repo_dir} exists. Purging for fresh clone.")
+        change_repository_file_permissions(repo_dir)
         shutil.rmtree(repo_dir)
 
     try:
@@ -231,6 +229,21 @@ def write_file_for_report_processing(repo_name, issue_content):
     except Exception as e:
         logger.error(f"Failed to write issue to file: {e}")
         raise
+
+def change_repository_file_permissions(repo_dir):
+    """
+    Changes the file permissions for all of the files in the repository directory, so that deletion can occur.
+    :param repo_dir: The path of the repository.
+    """
+
+    os.chmod(repo_dir, S_IWUSR|S_IREAD)
+    for root, dirs, files in os.walk(repo_dir):
+
+        for subdir in dirs:
+            os.chmod(os.path.join(root, subdir), S_IWUSR|S_IREAD)
+            
+        for file in files:
+            os.chmod(os.path.join(root, file), S_IWUSR|S_IREAD)
 
 
 def extract_and_validate_repo_info(data):
@@ -293,7 +306,6 @@ def store_embeddings(embeddings_document):
         except Exception:
             abort(500, description="Failed to store embeddings in file.")
 
-
 def retrieve_stored_sha(owner, repo_name):
     """
     Retrieves the stored commit SHA for the specified repository.
@@ -304,7 +316,6 @@ def retrieve_stored_sha(owner, repo_name):
     :raises: Aborts the request with a 500 error if retrieval fails.
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name}.")
-
     try:
         if db.USE_DATABASE:
             stored_commit_sha = retrieve_sha_from_db(owner, repo_name)
@@ -337,7 +348,7 @@ def store_embeddings_in_db(embeddings_document):
     """
     logger.debug("Storing embeddings in MongoDB.")
     try:
-        embeddings_collection.update_one(
+        db.get_embeddings_collection().update_one(
             {'repo_name': embeddings_document['repo_name'], 'owner': embeddings_document['owner']},
             {'$set': embeddings_document},
             upsert=True
@@ -359,7 +370,7 @@ def retrieve_sha_from_db(owner, repo_name):
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name} from MongoDB.")
     try:
-        existing_embedding = embeddings_collection.find_one(
+        existing_embedding = db.get_embeddings_collection().find_one(
             {'repo_name': repo_name, 'owner': owner},
             sort=[('stored_at', -1)]  # Get the latest record
         )
