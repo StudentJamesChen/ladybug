@@ -3,6 +3,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import wordpunct_tokenize
 from nltk.corpus import wordnet as wn
 from nltk import pos_tag
+from experimental_unixcoder.bug_localization import BugLocalization
 
 class Preprocessor:
     def camel_case_split(identifier):
@@ -86,15 +87,15 @@ class Preprocessor:
         else:
             return wn.NOUN
         
-    def lematize_tokens(tokens):
+    def lemmatize_tokens(tokens):
         '''
         Lemmatizes a list of tokens with their POS tag
 
         Args:
-            tokens (list of strings): tokens to be lematized
+            tokens (list of strings): tokens to be lemmatized
         
         Returns:
-            tokens (list of strings): lematized tokens
+            tokens (list of strings): lemmatized tokens
         '''
         lemmatizer = WordNetLemmatizer()
 
@@ -140,12 +141,19 @@ class Preprocessor:
         tokens = [token.lower() for token in tokens]
 
         # Lemmatize the tokens. i.e., running -> run
-        tokens = Preprocessor.lematize_tokens(tokens)
+        tokens = Preprocessor.lemmatize_tokens(tokens)
         
         # Remove short tokens
         tokens = [token for token in tokens if len(token) > 2]
 
         # Join the tokens into a single string and remove cases
         preprocessed_text = " ".join(tokens)
+
+        bugLocalizer = BugLocalization()
+
+        print(preprocessed_text)
+
+        # Calculate embeddings for preprocessed text
+        preprocessed_text = bugLocalizer.encode_text(preprocessed_text)
 
         return preprocessed_text

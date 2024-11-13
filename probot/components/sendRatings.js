@@ -18,6 +18,7 @@ export const sendRatings = async(ratings, context) => {
         const issueComment = context.issue({body: commentBody});
         try {
             await context.octokit.issues.createComment(issueComment);
+
             console.log("Ratings comment was successful.");
         } catch(error) {
             console.error("Could not create issue message: ", error);
