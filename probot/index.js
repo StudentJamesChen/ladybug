@@ -128,8 +128,8 @@ export default (app) => {
 			// Pass the full repository object and context to sendRepo
 			const repoData = await sendRepo(fullRepo, context);
 			const fullData = {
-				issue: issue,
-				repository: fullRepo,
+				issue: issue.body || issue.title,
+				repository: repoData,
 			};
 
 			if (!fullData) {
