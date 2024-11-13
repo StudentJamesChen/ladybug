@@ -1,6 +1,7 @@
 import pytest
 from pathlib import Path
 from services.preprocess_bug_report import preprocess_bug_report
+from tests.constants import EXPECTED_BUG_REPORT_EMBEDDING
 
 # Sample bug report content for testing
 sample_bug_report_content = """
@@ -62,7 +63,7 @@ def test_preprocess_bug_report(setup_bug_report_file):
     result = preprocess_bug_report(bug_report_path)
 
     # Define expected preprocessed result after stop word removal, lowercasing, and lemmatization
-    expected_result = "app crash incorrect secret enter general information app version app source built from source android version android custom rom emulator same crash actual device with app and from droid expect result what expect error message displayed what happen instead app crash logcat org shadowice flocke andotp dev android runtime fatal exception main process org shadowice flocke andotp dev pid java lang illegal argument exception last encode character before the padding any valid base alphabet but not possible value expect the discard bit zero org apache common codec binary base validate character base java org apache common codec binary base decode base java org apache common codec binary base codec decode base codec java org apache common codec binary base codec decode base codec java org shadowice flocke andotp database entry init entry java org shadowice flocke andotp dialog manual entry dialog click manual entry dialog java com android internal app alert controller button handler handle message alert controller java android handler dispatch message handler java android looper loop looper java android app activity thread main activity thread java java lang reflect method invoke native method com android internal runtime init method and args caller run runtime init java com android internal zygote init main zygote init java step reproduce open entry creation dialog enter detail enter test the secret field and fill other require field press save"
+    expected_result = EXPECTED_BUG_REPORT_EMBEDDING
     assert result == expected_result, f"Expected '{expected_result}' but got '{result}'"
 
 def test_bug_report_file_not_found(tmp_path):

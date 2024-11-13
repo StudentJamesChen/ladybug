@@ -1,6 +1,7 @@
 import pytest
 from pathlib import Path
 from services.preprocess_source_code import preprocess_source_code
+from .constants import EXPECTED_SOURCE_CODE_EMBEDDING
 
 # Sample content for Java files
 sample_java_content = """
@@ -35,13 +36,14 @@ def test_preprocess_source_code(create_sample_java_files):
     root_dir = create_sample_java_files
     result = preprocess_source_code(root_dir)
 
+
     # Validate results
     assert len(result) == 2, "Expected 2 .java files to be processed"
     
     # Check if results match expected preprocessing (i.e., tokens without stop words)
-    expected_content = "sample class main string args number system out println hello world"
+    expected_content = EXPECTED_SOURCE_CODE_EMBEDDING
     for _, file_name, content in result:
-        assert content == expected_content, f"Unexpected content for {file_name}"
+        assert content == expected_content, f"Unexpected content for {file_name}. Content: {content}"
 
 def test_empty_directory(tmp_path):
     # Test with an empty directory

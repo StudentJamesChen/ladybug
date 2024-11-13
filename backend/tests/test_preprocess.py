@@ -41,8 +41,8 @@ def test_get_pos_tag():
     assert Preprocessor.get_pos_tag("xyzzy") == wn.NOUN  # Defaults to NOUN
 
 
-def test_lematize_tokens():
+def test_lemmatize_tokens():
     # Test lemmatization
     tokens = ["running", "dogs", "beautifully", "was"]
-    lemmatized = Preprocessor.lematize_tokens(tokens)
+    lemmatized = Preprocessor.lemmatize_tokens(tokens)
     assert lemmatized == ["run", "dog", "beautifully", "be"]
