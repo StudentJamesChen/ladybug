@@ -71,6 +71,20 @@ class Database:
         """
         return self.__embeddings
     
+    def get_repo_files_embeddings(self, repo_id, embeddings_collection):
+        """
+        Gets the embeddings for all the files in a repo.
+
+        :return: A list of embeddings.
+        """
+        embeddings = []
+        results = embeddings_collection.find({"repo_id": repo_id})
+
+        for document in results:
+            embeddings.append(document.get("embedding"))
+
+        return embeddings
+    
     def insert_embeddings_document(self, embeddings_document, **kwargs):
         self.logger.debug("Storing embeddings in database.")
 
