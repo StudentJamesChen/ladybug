@@ -474,8 +474,7 @@ def send_initialized_data_to_db(repo_info, code_files):
                 upsert=True
             )
 
-        embeddings_collection = db.get_embeddings_collection()
-        repo_embeddings = db.get_repo_files_embeddings(repo_id, embeddings_collection)
+        repo_embeddings = db.get_repo_files_embeddings(repo_id)
         print(repo_embeddings)
         logger.info('Repo and code file embeddings stored in database successfully.')
 
