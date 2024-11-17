@@ -75,13 +75,13 @@ class Database:
         """
         Gets the embeddings for all the files in a repo.
 
-        :return: A list of embeddings.
+        :return: A tuple with (file id, embedding).
         """
         embeddings = []
         results = self.__embeddings.find({"repo_id": repo_id})
 
         for document in results:
-            embeddings.append(document.get("embedding"))
+            embeddings.append((document.get("_id"), document.get("embedding")))
 
         return embeddings
     
