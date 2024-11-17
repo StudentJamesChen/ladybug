@@ -475,7 +475,7 @@ def send_initialized_data_to_db(repo_info, code_files):
             )
 
         repo_embeddings = db.get_repo_files_embeddings(repo_id)
-        print(repo_embeddings)
+        
         logger.info('Repo and code file embeddings stored in database successfully.')
 
     except Exception as e:
