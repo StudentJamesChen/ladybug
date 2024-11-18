@@ -124,6 +124,17 @@ def report():
     #         abort(500, description=str(e))
 
     # FETCH ALL EMBEDDINGS FROM DB
+    try:
+        query = {
+        "repo_name": repo_info['repo_name'],
+        "owner": repo_info['owner']
+        }
+        repo_collection = db.get_repo_collection()
+        query_repo = repo_collection.find_one(query)
+        repo_embeddings = db.get_repo_files_embeddings(query_repo["_id"])
+    except Exception as e:
+        logger.info('Failed to find repo.')
+        return jsonify({"message": "Failed to find repo."}), 200
 
     # RUN BUG LOCALIZATION
 
@@ -473,8 +484,9 @@ def send_initialized_data_to_db(repo_info, code_files):
                 {'$set': file_info},
                 upsert=True
             )
-
+        
         logger.info('Repo and code file embeddings stored in database successfully.')
+
     except Exception as e:
         logger.error(f"Failed to store embeddings in database: {e}")
         raise
