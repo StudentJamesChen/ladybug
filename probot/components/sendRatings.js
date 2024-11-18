@@ -17,7 +17,8 @@ export const sendRatings = async(ratings, context) => {
             \n\nIf you think this is a problem or bug, please take the time to create a bug report here: [ladybug issues](https://github.com/LadyBugML/ladybug/issues/new)";
         const issueComment = context.issue({body: commentBody});
         try {
-            await context.octokit.issues.createComment(issueComment);  
+            await context.octokit.issues.createComment(issueComment);
+
             console.log("Ratings comment was successful.");
         } catch(error) {
             console.error("Could not create issue message: ", error);
@@ -33,7 +34,7 @@ export const sendRatings = async(ratings, context) => {
     {
         commentBody += `\n**${position++}. ${ratingsList[i]}**`;
     }
-    
+
     commentBody += "\n\nPlease take the time read through each of these files. \
     \nIf you have any problems with this response, or if you think an error occured, please take the time to create an issue here: [ladybug issues](https://github.com/LadyBugML/ladybug/issues/new). \
     \nHappy coding!";
