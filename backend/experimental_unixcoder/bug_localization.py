@@ -41,7 +41,7 @@ class BugLocalization:
             except Exception as e:
                 print(f"Error processing chunk {i // chunk_size + 1}: {e}")
                 continue
-
+        # print(embeddings)
         return embeddings
 
 
