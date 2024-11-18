@@ -138,10 +138,19 @@ def report():
 
     # RUN BUG LOCALIZATION
 
+    ranked_files = bug_localizer.rank_files(preprocessed_bug_report, repo_embeddings)
+
+    ranked_list = []
+
+    for i in range(10) in ranked_files:
+        ranked_list.append(ranked_files[i][0])
+
+    return jsonify({"files": ranked_list}), 200
+
     # FORMAT RANKINGS?
 
     # SEND RESPONSE TO PROBOT
-    return jsonify({"message": "Embeddings computed and stored", "preprocessed_bug_report": preprocessed_bug_report}), 200
+    # return jsonify({"message": "Embeddings computed and stored", "preprocessed_bug_report": preprocessed_bug_report}), 200
 
 
 # ======================================================================================================================
