@@ -52,6 +52,7 @@ def initialization():
 
     try:
         process_and_store_embeddings(repo_info)
+        post_process_cleanup(repo_info)
     except Exception as e:
         logger.error(f"Initialization failed: {e}")
         abort(500, description=str(e))
