@@ -29,7 +29,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 bug_localizer = BugLocalization()
 
-
 # ======================================================================================================================
 # Routes
 # ======================================================================================================================
@@ -108,20 +107,21 @@ def report():
 
     # Retrieve the stored SHA
     stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
+
     # Check if embeddings are up to date
     if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
         return jsonify({"message": "Embeddings are up to date"}), 200
-    # else:
-    #     logger.info('Embeddings are outdated. Recomputing embeddings.')
-    #     try:
-    #         changed_files = partial_clone(stored_commit_sha, repo_info)
-    #
-    #         # DARREN WIP
-    #         # process_and_patch_embeddings(changed_files, repo_info)
-    #     except Exception as e:
-    #         logger.error(f"Failed to recompute embeddings: {e}")
-    #         abort(500, description=str(e))
+    else:
+        logger.info('Embeddings are outdated. Recomputing embeddings.')
+        try:
+            changed_files = partial_clone(stored_commit_sha, repo_info)
+            logger.info(f"changed files: {changed_files}")
+            process_and_patch_embeddings(changed_files, repo_info)
+            post_process_cleanup(repo_info)
+        except Exception as e:
+            logger.error(f"Failed to recompute embeddings: {e}")
+            abort(500, description=str(e))
 
     # FETCH ALL EMBEDDINGS FROM DB
 
@@ -144,17 +144,16 @@ def partial_clone(old_sha, repo_info):
     :param repo_info: Dictionary containing repository info
     :return changed_files: Dictionary of changed files and their change type (added, modified, removed)
     """
-    new_sha = repo_info['latest_commit_sha']
-
-    changed_files = get_changed_files(repo_info, old_sha, new_sha)
-    zip_archive = get_zip_archive(repo_info)
-
     repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
+    new_sha = repo_info['latest_commit_sha']
+    changed_files = get_changed_files(repo_info, old_sha, new_sha, repo_dir)
+    zip_archive = get_zip_archive(repo_info)
+    
     extract_files(changed_files, zip_archive, repo_dir)
 
     return changed_files
 
-def get_changed_files(repo_info, old_sha, new_sha):
+def get_changed_files(repo_info, old_sha, new_sha, repo_dir):
     """
     Gets the diff between two commits and applies filtering.
 
@@ -164,6 +163,7 @@ def get_changed_files(repo_info, old_sha, new_sha):
     :return changed_files: Dictionary of changed files and their change type (added, modified, removed)
     """
     url = f"https://api.github.com/repos/{repo_info['owner']}/{repo_info['repo_name']}/compare/{old_sha}...{new_sha}"
+    logger.info(url)
     response = requests.get(url)
 
     if response.status_code == 200:
@@ -175,9 +175,9 @@ def get_changed_files(repo_info, old_sha, new_sha):
             
             # Filter files based on the `.java` extension
             changed_files = {
-                "added": [f["filename"] for f in files if f["status"] == "added" and f["filename"].endswith(".java")],
-                "modified": [f["filename"] for f in files if f["status"] == "modified" and f["filename"].endswith(".java")],
-                "removed": [f["filename"] for f in files if f["status"] == "removed" and f["filename"].endswith(".java")]
+                "added": [f["filename"].replace(repo_dir + '/', '') for f in files if f["status"] == "added" and f["filename"].endswith(".java")],
+                "modified": [f["filename"].replace(repo_dir + '/', '') for f in files if f["status"] == "modified" and f["filename"].endswith(".java")],
+                "removed": [f["filename"].replace(repo_dir + '/', '') for f in files if f["status"] == "removed" and f["filename"].endswith(".java")]
             }
             
             return changed_files
@@ -233,6 +233,31 @@ def extract_files(changed_files, zip_archive, repo_dir):
             except KeyError:
                 print(f"File {file_path} not found in archive.")
 
+def post_process_cleanup(repo_info):
+    """
+    Deletes the directory if the condition is met.
+
+    Args:
+        dir_path (str): Path to the directory to be deleted.
+        condition (bool): Condition to determine whether to delete the directory.
+
+    Returns:
+        None
+    """
+    dir_path = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
+    try:
+        if os.path.exists(dir_path):
+            if os.path.isdir(dir_path):
+                print(f"Deleting directory: {dir_path}")
+                shutil.rmtree(dir_path)
+                print(f"Directory {dir_path} deleted successfully.")
+            else:
+                print(f"The path {dir_path} is not a directory.")
+        elif not os.path.exists(dir_path):
+            print(f"Directory {dir_path} does not exist.")
+    except Exception as e:
+        print(f"An error occurred while deleting the directory: {e}")
+
 def process_and_patch_embeddings(changed_files, repo_info):
     """
     Processes the repository by cloning, computing embeddings, and storing them. Always performs a fresh setup.
@@ -247,37 +272,50 @@ def process_and_patch_embeddings(changed_files, repo_info):
     for file in preprocessed_files:
         logger.info(f"Preprocessed changed file: {file}")
 
-    # Store embeddings
+    # Clean files
     clean_files = clean_embedding_paths_for_db(preprocessed_files, repo_dir)
+    logger.info("cleaned changed files")
+    update_embeddings_in_db(changed_files, clean_files, repo_info)
+    update_sha(repo_info)
 
-    update_embeddings_in_db(changed_files, clean_files, repo_dir)
-
-def update_embeddings_in_db(changed_files, clean_files, repo_dir):
-    # 1. Process "added" and "modified" files for insertion or update
-    for clean_file in clean_files:
-        # Extract the relevant information from each clean_file dictionary
-        file_path = clean_file['path']
-        embedding = clean_file['embedding_text']
-
-        # Upsert (update if exists, insert if not)
-        db.get_embeddings_collection().update_one(
-            {"path": file_path},  # Use `path` as the unique identifier
+def update_sha(repo_info):
+    db.get_repo_collection().update_one(
+            {'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']},
             {
                 "$set": {
-                    "name": clean_file['name'],
-                    "content": clean_file['content'],
-                    "embedding_text": embedding,
+                    "commit_sha": repo_info['latest_commit_sha']
+                }
+            },
+            upsert=False
+        )
+
+def update_embeddings_in_db(changed_files, clean_files, repo_info):
+    # Get the `repo_id` for the current repository
+    repo_id = db.get_repo_collection().find_one({'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']})['_id']
+    logger.info(f"Retrieved repo id : {repo_id}")
+
+    # 1. Handle "added" and "modified" files by upserting
+    for clean_file in clean_files:
+        file_path = clean_file['path']
+        embedding = clean_file['embedding_text']
+        
+        # Upsert the document in the code_files collection
+        db.get_embeddings_collection().update_one(
+            {"repo_id": repo_id, "route": file_path},  # Unique combination of repo_id and route
+            {
+                "$set": {
+                    "embedding": embedding,
+                    "last_updated": datetime.utcnow().isoformat() + 'Z'
                 }
             },
             upsert=True
         )
 
-    # 2. Delete Embeddings for "removed" files
+    # 2. Handle "removed" files by deleting them from the collection
     for file_path in changed_files.get("removed", []):
-        file_path.replace(repo_dir + '/', '')
-        db.get_embeddings_collection().delete_one({"path": file_path})
+        db.get_embeddings_collection().delete_one({"repo_id": repo_id, "route": file_path})
 
-    print("Database updated successfully.")
+    logger.info("Database updated with added, modified, and removed files.")
 
 def process_and_store_embeddings(repo_info):
     """
@@ -523,7 +561,7 @@ def retrieve_sha_from_db(owner, repo_name):
     """
     logger.debug(f"Retrieving stored SHA for {owner}/{repo_name} from MongoDB.")
     try:
-        existing_embedding = db.get_embeddings_collection().find_one(
+        existing_embedding = db.get_repo_collection().find_one(
             {'repo_name': repo_name, 'owner': owner},
             sort=[('stored_at', -1)]  # Get the latest record
         )
