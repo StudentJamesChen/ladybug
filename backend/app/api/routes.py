@@ -117,7 +117,6 @@ def report():
         logger.info('Embeddings are outdated. Recomputing embeddings.')
         try:
             changed_files = partial_clone(stored_commit_sha, repo_info)
-            logger.info(f"changed files: {changed_files}")
             process_and_patch_embeddings(changed_files, repo_info)
             post_process_cleanup(repo_info)
         except Exception as e:
@@ -181,6 +180,8 @@ def get_changed_files(repo_info, old_sha, new_sha, repo_dir):
                 "removed": [f["filename"].replace(repo_dir + '/', '') for f in files if f["status"] == "removed" and f["filename"].endswith(".java")]
             }
             
+            logger.info(f"Changed files: {changed_files}")
+
             return changed_files
         else:
             print("Error: 'files' key not found in response data.")
@@ -235,29 +236,14 @@ def extract_files(changed_files, zip_archive, repo_dir):
                 print(f"File {file_path} not found in archive.")
 
 def post_process_cleanup(repo_info):
-    """
-    Deletes the directory if the condition is met.
-
-    Args:
-        dir_path (str): Path to the directory to be deleted.
-        condition (bool): Condition to determine whether to delete the directory.
-
-    Returns:
-        None
-    """
     dir_path = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
     try:
         if os.path.exists(dir_path):
             if os.path.isdir(dir_path):
-                print(f"Deleting directory: {dir_path}")
                 shutil.rmtree(dir_path)
-                print(f"Directory {dir_path} deleted successfully.")
-            else:
-                print(f"The path {dir_path} is not a directory.")
-        elif not os.path.exists(dir_path):
-            print(f"Directory {dir_path} does not exist.")
+                logger.info(f"Directory {dir_path} deleted successfully.")
     except Exception as e:
-        print(f"An error occurred while deleting the directory: {e}")
+        logger.error(f"An error occurred while deleting the directory: {e}")
 
 def process_and_patch_embeddings(changed_files, repo_info):
     """
@@ -273,9 +259,7 @@ def process_and_patch_embeddings(changed_files, repo_info):
     for file in preprocessed_files:
         logger.info(f"Preprocessed changed file: {file}")
 
-    # Clean files
     clean_files = clean_embedding_paths_for_db(preprocessed_files, repo_dir)
-    logger.info("cleaned changed files")
     update_embeddings_in_db(changed_files, clean_files, repo_info)
     update_sha(repo_info)
 
@@ -291,18 +275,17 @@ def update_sha(repo_info):
         )
 
 def update_embeddings_in_db(changed_files, clean_files, repo_info):
-    # Get the `repo_id` for the current repository
     repo_id = db.get_repo_collection().find_one({'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']})['_id']
     logger.info(f"Retrieved repo id : {repo_id}")
 
-    # 1. Handle "added" and "modified" files by upserting
+    # Add and update embeddings
     for clean_file in clean_files:
         file_path = clean_file['path']
         embedding = clean_file['embedding_text']
         
-        # Upsert the document in the code_files collection
+        # Upsert the document in the embeddings collection
         db.get_embeddings_collection().update_one(
-            {"repo_id": repo_id, "route": file_path},  # Unique combination of repo_id and route
+            {"repo_id": repo_id, "route": file_path},
             {
                 "$set": {
                     "embedding": embedding,
@@ -312,7 +295,7 @@ def update_embeddings_in_db(changed_files, clean_files, repo_info):
             upsert=True
         )
 
-    # 2. Handle "removed" files by deleting them from the collection
+    # Remove embeddings
     for file_path in changed_files.get("removed", []):
         db.get_embeddings_collection().delete_one({"repo_id": repo_id, "route": file_path})
 
