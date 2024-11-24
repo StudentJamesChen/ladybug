@@ -27,7 +27,6 @@ routes = Blueprint('routes', __name__)
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-bug_localizer = BugLocalization()
 
 # ======================================================================================================================
 # Routes
