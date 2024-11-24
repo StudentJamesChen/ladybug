@@ -17,6 +17,8 @@ class UniXcoder(nn.Module):
             * `model_name`- huggingface model card name. e.g. microsoft/unixcoder-base
         """       
         self.set_seed(42)
+        torch.set_default_dtype(torch.float32)
+
         super(UniXcoder, self).__init__()
         self.tokenizer = RobertaTokenizer.from_pretrained(model_name)
         self.config = RobertaConfig.from_pretrained(model_name)
