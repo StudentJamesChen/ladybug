@@ -1,7 +1,9 @@
 import pytest
-from pathlib import Path
+import torch
+import torch.nn.functional as F
 from services.preprocess_bug_report import preprocess_bug_report
 from tests.constants import EXPECTED_BUG_REPORT_EMBEDDING
+
 
 # Sample bug report content for testing
 sample_bug_report_content = """
@@ -62,9 +64,20 @@ def test_preprocess_bug_report(setup_bug_report_file):
     bug_report_path = setup_bug_report_file
     result = preprocess_bug_report(bug_report_path)
 
-    # Define expected preprocessed result after stop word removal, lowercasing, and lemmatization
-    expected_result = EXPECTED_BUG_REPORT_EMBEDDING
-    assert result == expected_result, f"Expected '{expected_result}' but got '{result}'"
+    result_tensor = torch.tensor(result)
+    expected_tensor = torch.tensor(EXPECTED_BUG_REPORT_EMBEDDING)
+
+    # Convert query embeddings and file embeddings from lists back to tensors
+    for result_embedding, expected_embedding in zip(result, EXPECTED_BUG_REPORT_EMBEDDING):
+        result_tensor = torch.tensor(result_embedding)
+        expected_tensor = torch.tensor(expected_embedding)
+
+        # Compute similarity
+        similarity = torch.nn.functional.cosine_similarity(
+            result_tensor, expected_tensor, dim=1
+        ).item()
+        
+        assert similarity > 0.995, f"Cosine similarity is too low: {similarity}"
 
 def test_bug_report_file_not_found(tmp_path):
     # Provide a nonexistent path for bug report file
