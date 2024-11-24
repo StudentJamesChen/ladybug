@@ -127,10 +127,24 @@ def report():
 
     # RUN BUG LOCALIZATION
 
-    # FORMAT RANKINGS?
+    # FORMAT RANKINGS
+
+    # **Hardcoded Data for Testing**
+    hardcoded_response = {
+        "preprocessed_bug_report": "This is a hardcoded preprocessed bug report for testing purposes.",
+        "files": [
+            "src/main.py",
+            "src/utils/helpers.py",
+            "tests/test_main.py"
+        ]
+    }
+
+    logger.info("Sending hardcoded response data to Probot.")
+
+    return jsonify(hardcoded_response), 200
 
     # SEND RESPONSE TO PROBOT
-    return jsonify({"message": "Embeddings computed and stored", "preprocessed_bug_report": preprocessed_bug_report}), 200
+    # return jsonify({"message": "Embeddings computed and stored", "preprocessed_bug_report": preprocessed_bug_report}), 200
 
 
 # ======================================================================================================================
