@@ -3,6 +3,8 @@
 
 import torch
 import torch.nn as nn
+import random
+import numpy as np
 from transformers import RobertaTokenizer, RobertaModel, RobertaConfig
 
 class UniXcoder(nn.Module):
@@ -13,7 +15,8 @@ class UniXcoder(nn.Module):
             Parameters:
 
             * `model_name`- huggingface model card name. e.g. microsoft/unixcoder-base
-        """        
+        """       
+        self.set_seed(42)
         super(UniXcoder, self).__init__()
         self.tokenizer = RobertaTokenizer.from_pretrained(model_name)
         self.config = RobertaConfig.from_pretrained(model_name)
@@ -26,6 +29,13 @@ class UniXcoder(nn.Module):
         self.lsm = nn.LogSoftmax(dim=-1)
         
         self.tokenizer.add_tokens(["<mask0>"],special_tokens=True)
+    
+    def set_seed(seed):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
           
     def tokenize(self, inputs, mode="<encoder-only>", max_length=512, padding=False):
         """ 
