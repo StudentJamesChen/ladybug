@@ -18,6 +18,7 @@ class UniXcoder(nn.Module):
         """       
         self.set_seed(42)
         torch.set_default_dtype(torch.float32)
+        torch.use_deterministic_algorithms(True)
 
         super(UniXcoder, self).__init__()
         self.tokenizer = RobertaTokenizer.from_pretrained(model_name)
