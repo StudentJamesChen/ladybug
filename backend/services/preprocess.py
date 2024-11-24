@@ -6,6 +6,9 @@ from nltk import pos_tag
 from experimental_unixcoder.bug_localization import BugLocalization
 
 class Preprocessor:
+    def __init__(self):
+        self.bug_localizer = BugLocalization()
+
     def camel_case_split(identifier):
         """
         Splits camelCase words via regular expression
@@ -102,7 +105,7 @@ class Preprocessor:
         # Call the get_pos_tag function to assign the correct POS tag to each token in tokens
         return [lemmatizer.lemmatize(token, Preprocessor.get_pos_tag(token)) for token in tokens]        
     
-    def preprocess_text(text, stop_words_path):
+    def preprocess_text(self, text, stop_words_path):
         """
         Preprocesses input text by
             - Removing Numbers
@@ -149,11 +152,9 @@ class Preprocessor:
         # Join the tokens into a single string and remove cases
         preprocessed_text = " ".join(tokens)
 
-        bugLocalizer = BugLocalization()
-
         print(preprocessed_text)
 
         # Calculate embeddings for preprocessed text
-        preprocessed_text = bugLocalizer.encode_text(preprocessed_text)
+        preprocessed_text = self.bug_localizer.encode_text(preprocessed_text)
 
         return preprocessed_text
