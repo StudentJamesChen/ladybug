@@ -484,7 +484,6 @@ def send_initialized_data_to_db(repo_info, code_files):
     :raises: Exception if storage fails.
     """
     logger.debug("Storing repo information and embeddings in MongoDB.")
-
     try:
         # Insert or update the repository information in 'repos' collection
         repo_id = db.get_repo_collection().update_one(
