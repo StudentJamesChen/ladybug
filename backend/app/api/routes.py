@@ -89,7 +89,6 @@ def report():
 
     # Extract and validate repository information
     repo_info = extract_and_validate_repo_info(repository)
-
     # Write issue to report file
     try:
         report_file_path = write_file_for_report_processing(repo_info['repo_name'], issue)
@@ -99,20 +98,20 @@ def report():
 
     try:
         preprocessed_bug_report = preprocess_bug_report(report_file_path)
-        logger.info(f"Preprocessed bug report: {preprocessed_bug_report}")
     except Exception as e:
         logger.error(f"Failed to preprocess bug report: {e}")
         abort(500, description="Failed to preprocess bug report")
 
-    # COMPUTE BUG REPORT EMBEDDINGS
-
     # Retrieve the stored SHA
     stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
+    if not stored_commit_sha:
+        logger.info("No stored commit SHA found.")
+        return jsonify({"message" : "Failed because no stored commit SHA"}), 500
 
+    logger.info(f"Stored commit SHA: {stored_commit_sha}")
     # Check if embeddings are up to date
     if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
-        return jsonify({"message": "Embeddings are up to date"}), 200
     else:
         logger.info('Embeddings are outdated. Recomputing embeddings.')
         try:
@@ -134,15 +133,16 @@ def report():
         repo_embeddings = db.get_repo_files_embeddings(query_repo["_id"])
     except Exception as e:
         logger.info('Failed to find repo.')
-        return jsonify({"message": "Failed to find repo."}), 200
+        return jsonify({"message": "Failed to find repo."}), 405
 
-    # RUN BUG LOCALIZATION
+    ranked_files = bug_localizer.rank_files(preprocessed_bug_report, repo_embeddings)
 
-    # FORMAT RANKINGS?
+    ranked_list = []
 
-    # SEND RESPONSE TO PROBOT
-    return jsonify({"message": "Embeddings computed and stored", "preprocessed_bug_report": preprocessed_bug_report}), 200
+    for i in range(min(10, len(ranked_files))):
+        ranked_list.append(ranked_files[i])
 
+    return jsonify({"message": "Report processed successfully", "ranked_files": ranked_list}), 200
 
 # ======================================================================================================================
 # Helper Functions
