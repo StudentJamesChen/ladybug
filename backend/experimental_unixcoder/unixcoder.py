@@ -30,7 +30,7 @@ class UniXcoder(nn.Module):
         
         self.tokenizer.add_tokens(["<mask0>"],special_tokens=True)
     
-    def set_seed(seed):
+    def set_seed(self, seed):
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
