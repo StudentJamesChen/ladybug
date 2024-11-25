@@ -26,11 +26,11 @@ export default (app) => {
 				});
 
 				// Optionally, you can create an issue or perform other actions here
-				await context.octokit.issues.create({
+				const initIssue = await context.octokit.issues.create({
 					owner: ownerName,
 					repo: repoName,
-					title: 'Hello!',
-					body: 'hi',
+					title: 'Welcome to LadyBug! 🐞',
+					body: getInitializationComment(repoName),
 				});
 
 				// Pass the full repository object and context to sendRepo
@@ -51,6 +51,13 @@ export default (app) => {
 						throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
 					}
 					console.log('Repo info sent to Flask backend successfully.');
+
+                    await context.octokit.issues.createComment({
+                        owner: ownerName,
+                        repo: repoName,
+                        issue_number: initIssue.data.number,
+                        body: getCompletionComment(repoName)
+                    })
 				} catch (error) {
 					console.error('Error while sending repo info:', error);
 				}
@@ -197,5 +204,43 @@ async function handleIssueComment(context, issueCommentBody) {
     }
 }
 
+function getInitializationComment(repoName) {
+    return `
+# Hang Tight, We're Getting Ready! ⏳
+
+Hello, ${repoName}!
+
+I've been invited to your repository, and I'm thrilled to get started! 🎉 I'm currently working behind the scenes to process your codebase and prepare everything I need to assist you with bug localization. 
+
+Initialization might take a few minutes, so hang tight while I set things up. Here's what I'm doing:
+- 🪄 Preprocessing all source code files.
+- 🔍 Generating embeddings for smarter bug tracking.
+- 🔄 Setting up my internal database for your repo.
+
+I'll let you know as soon as the setup is complete with a follow-up comment below. Thank you for your patience!
+`;
+}
+
+function getCompletionComment(repoName) {
+    return `
+# All Set! 🎉
+
+Good news, ${repoName}! 🥳 
+
+The initialization process is now complete, and I'm ready to assist you with your bug localization needs. Here's what I've done:
+- ✅ Successfully preprocessed all source code files.
+- ✅ Generated embeddings for better bug analysis.
+- ✅ Fully integrated with your repository.
+
+To get assistance localizing bugs, create a new issue and I will automatically take a look.
+
+I'm here to help you save time and debug smarter. Let the journey to cleaner code begin! 🚀
+
+---
+
+Happy debugging,  
+LadyBug 🐞
+`;
+}
 
 };
