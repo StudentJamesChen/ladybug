@@ -135,7 +135,9 @@ def report():
         logger.info('Failed to find repo.')
         return jsonify({"message": "Failed to find repo."}), 405
 
-    ranked_files = BugLocalization.rank_files(preprocessed_bug_report, repo_embeddings)
+    bug_localizer = BugLocalization()
+
+    ranked_files = bug_localizer.rank_files(preprocessed_bug_report, repo_embeddings)
 
     ranked_list = []
 
