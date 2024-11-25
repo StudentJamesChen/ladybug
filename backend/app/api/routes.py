@@ -88,6 +88,7 @@ def report():
 
     # Extract and validate repository information
     repo_info = extract_and_validate_repo_info(repository)
+
     # Write issue to report file
     try:
         report_file_path = write_file_for_report_processing(repo_info['repo_name'], issue)
@@ -134,7 +135,9 @@ def report():
         logger.info('Failed to find repo.')
         return jsonify({"message": "Failed to find repo."}), 405
 
-    ranked_files = BugLocalization.rank_files(preprocessed_bug_report, repo_embeddings)
+    bug_localizer = BugLocalization()
+
+    ranked_files = bug_localizer.rank_files(preprocessed_bug_report, repo_embeddings)
 
     ranked_list = []
 
@@ -486,7 +489,6 @@ def send_initialized_data_to_db(repo_info, code_files):
     :raises: Exception if storage fails.
     """
     logger.debug("Storing repo information and embeddings in MongoDB.")
-
     try:
         # Insert or update the repository information in 'repos' collection
         repo_id = db.get_repo_collection().update_one(
