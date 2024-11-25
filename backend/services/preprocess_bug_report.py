@@ -12,7 +12,7 @@ def preprocess_bug_report(bug_report_path: str):
     Returns:
         String: The preprocessed bug report
     """
-
+    preprocessor = Preprocessor()
     stop_words_path = Path(__file__).parent / "../data/stop_words/java-keywords-bugs.txt"
 
     # Put bug report content into a string
@@ -24,7 +24,7 @@ def preprocess_bug_report(bug_report_path: str):
         return 
 
     # Run bug report through preprocessor
-    preprocessed_bug_report = Preprocessor.preprocess_text(bug_report_string, stop_words_path)
+    preprocessed_bug_report = preprocessor.preprocess_text(bug_report_string, stop_words_path)
 
     # Apply query reformulation (MVP)
 

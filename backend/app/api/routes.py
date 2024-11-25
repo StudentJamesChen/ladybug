@@ -27,7 +27,6 @@ routes = Blueprint('routes', __name__)
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-bug_localizer = BugLocalization()
 
 # ======================================================================================================================
 # Routes
@@ -89,6 +88,7 @@ def report():
 
     # Extract and validate repository information
     repo_info = extract_and_validate_repo_info(repository)
+
     # Write issue to report file
     try:
         report_file_path = write_file_for_report_processing(repo_info['repo_name'], issue)
@@ -135,11 +135,14 @@ def report():
         logger.info('Failed to find repo.')
         return jsonify({"message": "Failed to find repo."}), 405
 
-    # A sorted list of (file_id, max_similarity_score) tuples in descending order of similarity.
-    # ranked_files = bug_localizer.rank_files(preprocessed_bug_report, repo_embeddings)
-    # logger.info(f"Ranked files: {ranked_files}")
+    ranked_files = BugLocalization.rank_files(preprocessed_bug_report, repo_embeddings)
 
-    return jsonify({"message": "Report processed successfully", "ranked_files": ranked_files}), 200
+    ranked_list = []
+
+    for i in range(min(10, len(ranked_files))):
+        ranked_list.append(ranked_files[i])
+
+    return jsonify({"message": "Report processed successfully", "ranked_files": ranked_list}), 200
 
 # ======================================================================================================================
 # Helper Functions
