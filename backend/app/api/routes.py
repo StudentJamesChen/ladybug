@@ -491,20 +491,22 @@ def send_initialized_data_to_db(repo_info, code_files):
     logger.debug("Storing repo information and embeddings in MongoDB.")
     try:
         # Insert or update the repository information in 'repos' collection
-        repo_id = db.get_repo_collection().update_one(
+        repo = db.get_repo_collection().find_one_and_replace(
             {'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']},
-            {'$set': repo_info},
-            upsert=True
-        ).upserted_id
+            repo_info,
+            upsert=True,
+            return_document=True  # Retrieve the updated document
+        )
+        repo_id = repo['_id']  # Get the `_id` field of the repository document
 
         # Use the repository `_id` (repo_id) as a foreign key in `code_files` collection
         for file_info in code_files:
             file_info['repo_id'] = repo_id  # Add the repo_id reference to each code file document
 
             # Insert or update each code file's embedding in 'code_files' collection
-            db.get_embeddings_collection().update_one(
+            db.get_embeddings_collection().replace_one(
                 {'repo_id': repo_id, 'route': file_info['route']},
-                {'$set': file_info},
+                file_info,
                 upsert=True
             )
         
