@@ -56,71 +56,79 @@ export default (app, {getRouter}) => {
 
 
     app.on("installation_repositories.added", async (context) => {
-        const {repositories_added} = context.payload;
-        const installationId = context.payload.installation.id;
+    const { repositories_added } = context.payload;
+    const installationId = context.payload.installation.id;
 
-        try {
-            for (const repo of repositories_added) {
-                // Extract owner and repo name from full_name
-                const [ownerName, repoName] = repo.full_name.split('/');
-                const repoKey = `${ownerName}/${repoName}`;
-                repoToInstallationMap.set(repoKey, installationId);
-                console.log("Current repoToInstallationMap:", Array.from(repoToInstallationMap.entries()));
+    try {
+        for (const repo of repositories_added) {
+            const [ownerName, repoName] = repo.full_name.split('/');
+            const repoKey = `${ownerName}/${repoName}`;
+            repoToInstallationMap.set(repoKey, installationId);
+            console.log("Current repoToInstallationMap:", Array.from(repoToInstallationMap.entries()));
 
-                // Fetch the full repository data
-                const {data: fullRepo} = await context.octokit.repos.get({
-                    owner: ownerName,
-                    repo: repoName,
-                });
+            // Fetch the full repository data
+            const { data: fullRepo } = await context.octokit.repos.get({
+                owner: ownerName,
+                repo: repoName,
+            });
 
-                // Optionally, you can create an issue or perform other actions here
-                const initIssue = await context.octokit.issues.create({
-                    owner: ownerName,
-                    repo: repoName,
-                    title: 'Welcome to LadyBug! 🐞',
-                    body: getInitializationComment(repoName),
-                });
-                // Store the comment ID
-                const comment_id = initIssue.data.id;
+            // Create an initial issue
+            const initIssue = await context.octokit.issues.create({
+                owner: ownerName,
+                repo: repoName,
+                title: 'Welcome to LadyBug! 🐞',
+                body: getInitializationComment(repoName),
+            });
 
-                // Pass the full repository object and context to sendRepo
-                const repoData = await sendRepo(fullRepo, context);
-                if (!repoData) {
+            // Create an initial comment on the issue
+            const initComment = await context.octokit.issues.createComment({
+                owner: ownerName,
+                repo: repoName,
+                issue_number: initIssue.data.number,
+                body: getInitializationComment(repoName),
+            });
 
-                    console.error(`sendRepo returned null for ${ownerName}/${repoName}. Skipping Axios POST.`);
-                    return;
-                }
+            // Store the actual comment ID
+            const comment_id = initComment.data.id;
 
-                const data ={
-                    repoData,
-                    comment_id
-                }
-
-                try {
-                    const flaskResponse = await axios.post('http://localhost:5000/initialization', data, {
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                    });
-                    if (flaskResponse.status !== 200) {
-                        throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
-                    }
-                    console.log('Repo info sent to Flask backend successfully.');
-
-                    await context.octokit.issues.createComment({
-                        owner: ownerName,
-                        repo: repoName,
-                        issue_number: initIssue.data.number,
-                        body: getCompletionComment(repoName)
-                    })
-                } catch (error) {
-                    console.error('Error while sending repo info:', error);
-                }
+            // Pass the full repository object and context to sendRepo
+            const repoData = await sendRepo(fullRepo, context);
+            if (!repoData) {
+                console.error(`sendRepo returned null for ${ownerName}/${repoName}. Skipping Axios POST.`);
+                return;
             }
-        } catch (error) {
-            console.error('Failed to process repositories:', error);
+
+            const data = {
+                repoData,
+                comment_id
+            };
+
+            try {
+                const flaskResponse = await axios.post('http://localhost:5000/initialization', data, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                if (flaskResponse.status !== 200) {
+                    throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
+                }
+                console.log('Repo info sent to Flask backend successfully.');
+
+                await context.octokit.issues.createComment({
+                    owner: ownerName,
+                    repo: repoName,
+                    issue_number: initIssue.data.number,
+                    body: getCompletionComment(repoName)
+                });
+            } catch (error) {
+                console.error('Error while sending repo info:', error);
+            }
         }
-    });
+    } catch (error) {
+        console.error('Failed to process repositories:', error);
+    }
+});
+
 
 
     app.on('issues.opened', async (context) => {
@@ -232,7 +240,7 @@ export default (app, {getRouter}) => {
 
     function getInitializationComment(repoName) {
         return `
-# Hang Tight, We're Getting Ready! ⏳
+# Hang Tight, We're Getting Ready! ⏳ 
 
 Hello, ${repoName}!
 

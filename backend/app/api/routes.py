@@ -8,6 +8,8 @@ import shutil
 import zipfile
 import io
 import requests
+import queue
+import threading
 
 from flask import Blueprint, abort, request, jsonify
 from git import Repo, GitCommandError
@@ -30,6 +32,8 @@ routes = Blueprint('routes', __name__)
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+# Initialize a thread-safe queue for messages
+message_queue = queue.Queue()
 
 # ======================================================================================================================
 # Routes
@@ -52,19 +56,33 @@ def initialization():
 
     repo_data = data.get('repoData')
     comment_id = data.get('comment_id')
-    print(comment_id)
+
     repo_info = extract_and_validate_repo_info(repo_data)
-    time.sleep(3)
-    send_update_to_probot(repo_info['owner'],repo_info['repo_name'],comment_id, "Validated!")
-    time.sleep(3)
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                          "✅ **Initialization Started**: Validating repository information.")
+
     try:
-        process_and_store_embeddings(repo_info)
-        post_process_cleanup(repo_info)
+        process_and_store_embeddings(repo_info,comment_id)
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "🌀 **Cloning Repository**: Repository cloned successfully.")
     except Exception as e:
         logger.error(f"Initialization failed: {e}")
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              f"❌ **Initialization Failed**: {e}")
         abort(500, description=str(e))
 
+    try:
+        post_process_cleanup(repo_info)
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "✅ **Embeddings Stored**: Embeddings computed and stored successfully.")
+    except Exception as e:
+        logger.error(f"Post-processing failed: {e}")
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              f"⚠️ **Post-Processing Warning**: {e}")
+
     logger.info('Embeddings stored successfully.')
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                          "🎉 **Initialization Completed**: All embeddings are up to date.")
     return jsonify({"message": "Embeddings computed and stored"}), 200
 
 
@@ -98,53 +116,75 @@ def report():
 
     # Extract and validate repository information
     repo_info = extract_and_validate_repo_info(repository)
-    time.sleep(3)
-    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id, "Validated!")
-    time.sleep(3)
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                          "✅ **Report Processing Started**: Repository information validated.")
+
     # Write issue to report file
     try:
         report_file_path = write_file_for_report_processing(repo_info['repo_name'], issue)
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "📝 **Report Written**: Issue has been written to the report file.")
     except Exception as e:
         logger.error(f"Failed to write issue to file: {e}")
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              f"❌ **Report Writing Failed**: {e}")
         abort(500, description="Failed to write issue to file")
 
     try:
         preprocessed_bug_report = preprocess_bug_report(report_file_path)
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "🔍 **Bug Report Preprocessed**: Bug report has been successfully preprocessed.")
     except Exception as e:
         logger.error(f"Failed to preprocess bug report: {e}")
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              f"❌ **Preprocessing Failed**: {e}")
         abort(500, description="Failed to preprocess bug report")
 
     # Retrieve the stored SHA
     stored_commit_sha = retrieve_stored_sha(repo_info['owner'], repo_info['repo_name'])
     if not stored_commit_sha:
         logger.info("No stored commit SHA found.")
-        return jsonify({"message" : "Failed because no stored commit SHA"}), 500
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "⚠️ **SHA Retrieval Failed**: No stored commit SHA found.")
+        return jsonify({"message": "Failed because no stored commit SHA"}), 500
 
     logger.info(f"Stored commit SHA: {stored_commit_sha}")
     # Check if embeddings are up to date
     if stored_commit_sha == repo_info['latest_commit_sha']:
         logger.info('Embeddings are up to date.')
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "✅ **Embeddings Status**: Embeddings are up to date.")
     else:
         logger.info('Embeddings are outdated. Recomputing embeddings.')
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "🔄 **Embeddings Outdated**: Recomputing embeddings due to new commits.")
         try:
             changed_files = partial_clone(stored_commit_sha, repo_info)
             process_and_patch_embeddings(changed_files, repo_info)
             post_process_cleanup(repo_info)
+            send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                                  "✅ **Embeddings Updated**: Embeddings have been recomputed and updated.")
         except Exception as e:
             logger.error(f"Failed to recompute embeddings: {e}")
+            send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                                  f"❌ **Embeddings Update Failed**: {e}")
             abort(500, description=str(e))
 
     # FETCH ALL EMBEDDINGS FROM DB
     try:
         query = {
-        "repo_name": repo_info['repo_name'],
-        "owner": repo_info['owner']
+            "repo_name": repo_info['repo_name'],
+            "owner": repo_info['owner']
         }
         repo_collection = db.get_repo_collection()
         query_repo = repo_collection.find_one(query)
         repo_embeddings = db.get_repo_files_embeddings(query_repo["_id"])
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "📚 **Embeddings Fetched**: Retrieved all embeddings from the database.")
     except Exception as e:
         logger.info('Failed to find repo.')
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                              "❌ **Embeddings Retrieval Failed**: Could not fetch embeddings from the database.")
         return jsonify({"message": "Failed to find repo."}), 405
 
     bug_localizer = BugLocalization()
@@ -156,12 +196,38 @@ def report():
     for i in range(min(10, len(ranked_files))):
         ranked_list.append(ranked_files[i])
 
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                          "🎯 **Bug Localization Completed**: Ranked relevant files identified.")
     return jsonify({"message": "Report processed successfully", "ranked_files": ranked_list}), 200
+
 
 # ======================================================================================================================
 # Helper Functions
 # ======================================================================================================================
-def send_update_to_probot(owner, repo, comment_id, message):
+
+def message_worker():
+    """
+    Background worker that sends messages to Probot from the message_queue.
+    Ensures that each message is sent with at least a 5-second interval.
+    """
+    while True:
+        try:
+            # Get the next message from the queue
+            owner, repo, comment_id, message = message_queue.get()
+            if owner and repo and comment_id and message:
+                success = actual_send_update_to_probot(owner, repo, comment_id, message)
+                if success:
+                    logger.info(f"Message sent to Probot: {message}")
+                else:
+                    logger.error(f"Failed to send message to Probot: {message}")
+            # Wait for 5 seconds before sending the next message
+            time.sleep(2)
+        except Exception as e:
+            logger.error(f"Error in message_worker: {e}")
+            # Optional: Add a short sleep to prevent tight loop in case of continuous errors
+            time.sleep(5)
+
+def actual_send_update_to_probot(owner, repo, comment_id, message):
     """
     Sends an update message to the Probot /post-message endpoint to comment on a GitHub issue or pull request.
 
@@ -184,11 +250,24 @@ def send_update_to_probot(owner, repo, comment_id, message):
         response = requests.post('http://localhost:3000/post-message', json=payload)
         response.raise_for_status()  # Raises stored HTTPError, if one occurred.
 
-        print(f"Successfully posted message to {owner}/{repo} Issue #{comment_id}: {message}")
+        logger.info(f"Successfully posted message to {owner}/{repo} Issue #{comment_id}: {message}")
         return True
     except requests.exceptions.RequestException as e:
-        print(f"Failed to post message to Probot: {e}")
+        logger.error(f"Failed to post message to Probot: {e}")
         return False
+
+def send_update_to_probot(owner, repo, comment_id, message):
+    """
+    Enqueues a message to be sent to Probot.
+
+    Args:
+        owner (str): The GitHub username or organization name that owns the repository.
+        repo (str): The name of the repository.
+        comment_id (int): The number of the issue or pull request to comment on.
+        message (str): The message to post as a comment.
+    """
+    message_queue.put((owner, repo, comment_id, message))
+    logger.debug(f"Enqueued message for Probot: {message}")
 
 def partial_clone(old_sha, repo_info):
     """
@@ -202,10 +281,11 @@ def partial_clone(old_sha, repo_info):
     new_sha = repo_info['latest_commit_sha']
     changed_files = get_changed_files(repo_info, old_sha, new_sha, repo_dir)
     zip_archive = get_zip_archive(repo_info)
-    
+
     extract_files(changed_files, zip_archive, repo_dir)
 
     return changed_files
+
 
 def get_changed_files(repo_info, old_sha, new_sha, repo_dir):
     """
@@ -222,18 +302,21 @@ def get_changed_files(repo_info, old_sha, new_sha, repo_dir):
 
     if response.status_code == 200:
         data = response.json()
-        
+
         # Check if 'files' key is present in response data
         if 'files' in data:
             files = data['files']
-            
+
             # Filter files based on the `.java` extension
             changed_files = {
-                "added": [f["filename"].replace(repo_dir + '/', '') for f in files if f["status"] == "added" and f["filename"].endswith(".java")],
-                "modified": [f["filename"].replace(repo_dir + '/', '') for f in files if f["status"] == "modified" and f["filename"].endswith(".java")],
-                "removed": [f["filename"].replace(repo_dir + '/', '') for f in files if f["status"] == "removed" and f["filename"].endswith(".java")]
+                "added": [f["filename"].replace(repo_dir + '/', '') for f in files if
+                          f["status"] == "added" and f["filename"].endswith(".java")],
+                "modified": [f["filename"].replace(repo_dir + '/', '') for f in files if
+                             f["status"] == "modified" and f["filename"].endswith(".java")],
+                "removed": [f["filename"].replace(repo_dir + '/', '') for f in files if
+                            f["status"] == "removed" and f["filename"].endswith(".java")]
             }
-            
+
             logger.info(f"Changed files: {changed_files}")
 
             return changed_files
@@ -243,7 +326,8 @@ def get_changed_files(repo_info, old_sha, new_sha, repo_dir):
     else:
         print(f"Failed to fetch diff from GitHub. Status Code: {response.status_code}")
         return None
-    
+
+
 def get_zip_archive(repo_info):
     """
     Fetches the zipfile of the repository at the latest commit
@@ -261,6 +345,7 @@ def get_zip_archive(repo_info):
     else:
         print("Failed to download zip archive.")
 
+
 def extract_files(changed_files, zip_archive, repo_dir):
     """
     Extracts filtered source code files from a zipfile.
@@ -276,11 +361,11 @@ def extract_files(changed_files, zip_archive, repo_dir):
         for file_path in file_list:
             try:
                 zip_file_path = next((item for item in zip_archive.namelist() if item.endswith(file_path)), None)
-                if file_path in changed_files['added'] or file_path in changed_files['modified'] and zip_file_path:
+                if file_path in changed_files['added'] or (file_path in changed_files['modified'] and zip_file_path):
                     with zip_archive.open(zip_file_path) as file:
                         file_content = file.read().decode("utf-8")
                         extracted_files[file_path] = file_content
-                        
+
                         # Write to output directory
                         output_path = os.path.join(repo_dir, file_path)
                         os.makedirs(os.path.dirname(output_path), exist_ok=True)  # Create subdirectories if needed
@@ -288,6 +373,7 @@ def extract_files(changed_files, zip_archive, repo_dir):
                             out_file.write(file_content)
             except KeyError:
                 print(f"File {file_path} not found in archive.")
+
 
 def post_process_cleanup(repo_info):
     dir_path = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
@@ -299,6 +385,7 @@ def post_process_cleanup(repo_info):
     except Exception as e:
         logger.error(f"An error occurred while deleting the directory: {e}")
 
+
 def process_and_patch_embeddings(changed_files, repo_info):
     """
     Processes the repository by cloning, computing embeddings, and storing them. Always performs a fresh setup.
@@ -309,7 +396,7 @@ def process_and_patch_embeddings(changed_files, repo_info):
 
     # Preprocess the changed source code files
     preprocessed_files = preprocess_source_code(repo_dir)
-    
+
     for file in preprocessed_files:
         logger.info(f"Preprocessed changed file: {file}")
 
@@ -317,26 +404,30 @@ def process_and_patch_embeddings(changed_files, repo_info):
     update_embeddings_in_db(changed_files, clean_files, repo_info)
     update_sha(repo_info)
 
+
 def update_sha(repo_info):
     db.get_repo_collection().update_one(
-            {'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']},
-            {
-                "$set": {
-                    "commit_sha": repo_info['latest_commit_sha']
-                }
-            },
-            upsert=False
-        )
+        {'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']},
+        {
+            "$set": {
+                "commit_sha": repo_info['latest_commit_sha']
+            }
+        },
+        upsert=False
+    )
+    logger.info(f"Updated commit SHA to {repo_info['latest_commit_sha']} in the database.")
+
 
 def update_embeddings_in_db(changed_files, clean_files, repo_info):
-    repo_id = db.get_repo_collection().find_one({'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']})['_id']
+    repo_id = db.get_repo_collection().find_one({'repo_name': repo_info['repo_name'], 'owner': repo_info['owner']})[
+        '_id']
     logger.info(f"Retrieved repo id : {repo_id}")
 
     # Add and update embeddings
     for clean_file in clean_files:
         file_path = clean_file['path']
         embedding = clean_file['embedding_text']
-        
+
         # Upsert the document in the embeddings collection
         db.get_embeddings_collection().update_one(
             {"repo_id": repo_id, "route": file_path},
@@ -348,22 +439,28 @@ def update_embeddings_in_db(changed_files, clean_files, repo_info):
             },
             upsert=True
         )
+        logger.info(f"Upserted embedding for file: {file_path}")
 
     # Remove embeddings
     for file_path in changed_files.get("removed", []):
         db.get_embeddings_collection().delete_one({"repo_id": repo_id, "route": file_path})
+        logger.info(f"Removed embedding for file: {file_path}")
 
     logger.info("Database updated with added, modified, and removed files.")
 
-def process_and_store_embeddings(repo_info):
+
+def process_and_store_embeddings(repo_info,comment_id):
     """
     Processes the repository by cloning, computing embeddings, and storing them. Always performs a fresh setup.
 
     :param repo_info: Dictionary containing repository information.
+    :param comment_id: Comment ID.
     """
     repo_dir = os.path.join('repos', repo_info['owner'], repo_info['repo_name'])
 
     clone_repo(repo_info['repo_url'], repo_dir)
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], repo_info.get('comment_id'),
+                          "🌀 **Cloning Completed**: Repository cloned successfully.")
 
     filtered_files = filter_files(repo_dir)
     for file in filtered_files:
@@ -371,10 +468,14 @@ def process_and_store_embeddings(repo_info):
 
     if not filtered_files:
         logger.error("No Java files found in repository.")
+        send_update_to_probot(repo_info['owner'], repo_info['repo_name'], repo_info.get('comment_id'),
+                              "⚠️ **No Java Files Found**: No `.java` files detected in the repository.")
         raise ValueError("No Java files found in repository.")
 
     # Preprocess the source code files
     preprocessed_files = preprocess_source_code(repo_dir)
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id,
+                          "📝 **Embeddings Calculated**: Wow that took a while huh.")
     for file in preprocessed_files:
         logger.info(f"Preprocessed file: {file}")
 
@@ -400,7 +501,10 @@ def process_and_store_embeddings(repo_info):
     ]
 
     # Store repo and embeddings
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], repo_info.get('comment_id'),
+                          "📚 **Storing Embeddings**: Storing repository information and embeddings in the database.")
     send_initialized_data_to_db(repo_document, code_file_documents)
+
 
 def clean_embedding_paths_for_db(preprocessed_files, repo_dir):
     """
@@ -420,6 +524,7 @@ def clean_embedding_paths_for_db(preprocessed_files, repo_dir):
         }
         clean_files.append(clean_file)
     return clean_files
+
 
 def clone_repo(repo_url, repo_dir):
     """
@@ -466,20 +571,21 @@ def write_file_for_report_processing(repo_name, issue_content):
         logger.error(f"Failed to write issue to file: {e}")
         raise
 
+
 def change_repository_file_permissions(repo_dir):
     """
     Changes the file permissions for all of the files in the repository directory, so that deletion can occur.
     :param repo_dir: The path of the repository.
     """
 
-    os.chmod(repo_dir, S_IWUSR|S_IREAD)
+    os.chmod(repo_dir, S_IWUSR | S_IREAD)
     for root, dirs, files in os.walk(repo_dir):
 
         for subdir in dirs:
-            os.chmod(os.path.join(root, subdir), S_IWUSR|S_IREAD)
-            
+            os.chmod(os.path.join(root, subdir), S_IWUSR | S_IREAD)
+
         for file in files:
-            os.chmod(os.path.join(root, file), S_IWUSR|S_IREAD)
+            os.chmod(os.path.join(root, file), S_IWUSR | S_IREAD)
 
 
 def extract_and_validate_repo_info(data):
@@ -548,12 +654,13 @@ def send_initialized_data_to_db(repo_info, code_files):
                 {'$set': file_info},
                 upsert=True
             )
-        
-        logger.info('Repo and code file embeddings stored in database successfully.')
+            logger.info(f"Stored embedding for file: {file_info['route']}")
 
+        logger.info('Repo and code file embeddings stored in database successfully.')
     except Exception as e:
         logger.error(f"Failed to store embeddings in database: {e}")
         raise
+
 
 def retrieve_stored_sha(owner, repo_name):
     """
@@ -690,3 +797,9 @@ def store_embeddings_in_file_database(embeddings_document):
     except Exception as e:
         logger.error(f"Failed to write to embeddings records file: {e}")
         raise
+
+
+# Start the background worker thread
+worker_thread = threading.Thread(target=message_worker, daemon=True)
+worker_thread.start()
+
