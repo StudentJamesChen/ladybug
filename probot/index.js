@@ -6,101 +6,191 @@
 import {sendRepo} from './components/sendRepo.js';
 import {sendRatings} from './components/sendRatings.js';
 import axios from "axios";
+import express from "express";
+// At the top of your file, initialize the map
 
 
-export default (app) => {
 
-	app.on("installation_repositories.added", async (context) => {
-		const {repositories_added} = context.payload;
-		console.log('Payload:', context.payload);
+export default (app, {getRouter}) => {
+    const router = getRouter("/");
+    const repoToInstallationMap = new Map();
+    // Use any middleware
+    router.use(express.static("public"));
+    router.use(express.json());
 
-		try {
-			for (const repo of repositories_added) {
-				// Extract owner and repo name from full_name
-				const [ownerName, repoName] = repo.full_name.split('/');
+    router.post('/post-message', async (req, res) => {
+    const { owner, repo, comment_id, message } = req.body;
 
-				// Fetch the full repository data
-				const {data: fullRepo} = await context.octokit.repos.get({
-					owner: ownerName,
-					repo: repoName,
-				});
-
-				// Optionally, you can create an issue or perform other actions here
-				const initIssue = await context.octokit.issues.create({
-					owner: ownerName,
-					repo: repoName,
-					title: 'Welcome to LadyBug! 🐞',
-					body: getInitializationComment(repoName),
-				});
-
-				// Pass the full repository object and context to sendRepo
-				const data = await sendRepo(fullRepo, context);
-
-				if (!data) {
-					console.error(`sendRepo returned null for ${ownerName}/${repoName}. Skipping Axios POST.`);
-					continue; // Skip sending to Flask if data is invalid
-				}
-
-				try {
-					const flaskResponse = await axios.post('http://localhost:5000/initialization', data, {
-						headers: {
-							'Content-Type': 'application/json',
-						},
-					});
-					if (flaskResponse.status !== 200) {
-						throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
-					}
-					console.log('Repo info sent to Flask backend successfully.');
-
-                    await context.octokit.issues.createComment({
-                        owner: ownerName,
-                        repo: repoName,
-                        issue_number: initIssue.data.number,
-                        body: getCompletionComment(repoName)
-                    })
-				} catch (error) {
-					console.error('Error while sending repo info:', error);
-				}
-			}
-		} catch (error) {
-			console.error('Failed to process repositories:', error);
-		}
-	});
-
-
-	// Handler for issues.opened event
-app.on('issues.opened', async (context) => {
-    const issue = context.payload.issue;
-    const repository = context.payload.repository;
-
-    console.log(`Issue #${issue.number} opened in repository ${repository.full_name}`);
-
-    const issueAuthor = issue.user;
-    if (issueAuthor.type === 'Bot') {
-        console.log(`Issue #${issue.number} opened by a bot (${issueAuthor.login}). Ignoring.`);
-        return; // Exit early if the issue was opened by a bot
+    if (!owner || !repo || !comment_id || !message) {
+        return res.status(400).json({ error: 'Missing required fields: owner, repo, comment_id, message' });
     }
 
-    // Prepare data to send to Flask backend
-    const issueBody = issue.body || issue.title;
+    const repoKey = `${owner}/${repo}`;
+    const installationId = repoToInstallationMap.get(repoKey);
+
+    if (!installationId) {
+        return res.status(400).json({ error: `Installation not found for repository ${repoKey}` });
+    }
 
     try {
-        // Fetch the full repository data to ensure all necessary fields are present
-        const { data: fullRepo } = await context.octokit.repos.get({
-            owner: repository.owner.login,
-            repo: repository.name,
+        // Authenticate as the installation
+        const octokit = await app.auth(installationId);
+        if(!octokit)
+            res.status(500).json({error: `Failed to initialize octokit`})
+
+        // Post the comment to the specified issue
+        await octokit.issues.updateComment({
+            owner,
+            repo,
+            comment_id,
+            body: message,
         });
 
-        // Pass the full repository object and context to sendRepo
-        const repoData = await sendRepo(fullRepo, context);
-        const fullData = {
-            issue: issueBody,
-            repository: repoData,
-        };
+        console.log(`Posted message to ${repoKey} Issue #${comment_id}: ${message}`);
+        return res.status(200).json({ status: 'Comment posted successfully' });
+    } catch (error) {
+        console.error('Error posting comment:', error);
+        return res.status(500).json({ error: 'Failed to post comment' });
+    }
+});
 
-        if (!fullData) {
-            console.error(`sendRepo returned null for ${repository.full_name}. Skipping Axios POST.`);
-        } else {
+
+    app.on("installation_repositories.added", async (context) => {
+    const { repositories_added } = context.payload;
+    const installationId = context.payload.installation.id;
+
+    try {
+        for (const repo of repositories_added) {
+            const [ownerName, repoName] = repo.full_name.split('/');
+            const repoKey = `${ownerName}/${repoName}`;
+            repoToInstallationMap.set(repoKey, installationId);
+            console.log("Current repoToInstallationMap:", Array.from(repoToInstallationMap.entries()));
+
+            // Fetch the full repository data
+            const { data: fullRepo } = await context.octokit.repos.get({
+                owner: ownerName,
+                repo: repoName,
+            });
+
+            // Create an initial issue
+            const initIssue = await context.octokit.issues.create({
+                owner: ownerName,
+                repo: repoName,
+                title: 'Welcome to LadyBug! 🐞',
+                body: getInitializationComment(repoName),
+            });
+
+            // Create an initial comment on the issue
+            const initComment = await context.octokit.issues.createComment({
+                owner: ownerName,
+                repo: repoName,
+                issue_number: initIssue.data.number,
+                body: getInitializationComment(repoName),
+            });
+
+            // Store the actual comment ID
+            const comment_id = initComment.data.id;
+
+            // Pass the full repository object and context to sendRepo
+            const repoData = await sendRepo(fullRepo, context);
+            if (!repoData) {
+                console.error(`sendRepo returned null for ${ownerName}/${repoName}. Skipping Axios POST.`);
+                return;
+            }
+
+            const data = {
+                repoData,
+                comment_id
+            };
+
+            try {
+                const flaskResponse = await axios.post('http://localhost:5000/initialization', data, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                if (flaskResponse.status !== 200) {
+                    throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
+                }
+                console.log('Repo info sent to Flask backend successfully.');
+
+                await context.octokit.issues.createComment({
+                    owner: ownerName,
+                    repo: repoName,
+                    issue_number: initIssue.data.number,
+                    body: getCompletionComment(repoName)
+                });
+            } catch (error) {
+                console.error('Error while sending repo info:', error);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to process repositories:', error);
+    }
+});
+
+
+
+    app.on('issues.opened', async (context) => {
+        const issue = context.payload.issue;
+        const repository = context.payload.repository;
+         const installationId = context.payload.installation.id;
+
+        console.log(`Issue #${issue.number} opened in repository ${repository.full_name}`);
+
+        const issueAuthor = issue.user;
+        if (issueAuthor.type === 'Bot') {
+            console.log(`Issue #${issue.number} opened by a bot (${issueAuthor.login}). Ignoring.`);
+            return; // Exit early if the issue was opened by a bot
+        }
+
+        // Prepare data to send to Flask backend
+        const issueBody = issue.body || issue.title;
+
+        repoToInstallationMap.set(repository.full_name, installationId);
+        console.log("Current repoToInstallationMap:", Array.from(repoToInstallationMap.entries()));
+        try {
+            // Fetch the full repository data to ensure all necessary fields are present
+            const {data: fullRepo} = await context.octokit.repos.get({
+                owner: repository.owner.login,
+                repo: repository.name,
+            });
+
+            // Pass the full repository object and context to sendRepo
+            const repoData = await sendRepo(fullRepo, context);
+
+            if (!repoData) {
+                console.error(`sendRepo returned null for ${repository.full_name}. Skipping Axios POST.`);
+                // Reply to the issue with an error message
+                await replyWithError(context, issue.number, "An error occurred while processing the repository data.");
+                return; // Return early if repoData is null
+            }
+
+            // Create initial comment
+            const initialCommentBody = 'Processing your request... [0%]';
+            let initialComment;
+            try {
+                initialComment = await context.octokit.issues.createComment({
+                    owner: repository.owner.login,
+                    repo: repository.name,
+                    issue_number: issue.number,
+                    body: initialCommentBody,
+                });
+                console.log(`Created initial comment with ID ${initialComment.data.id}`);
+            } catch (error) {
+                console.error('Error creating initial comment:', error.message);
+                return; // Exit if we can't create the initial comment
+            }
+            // Store the comment ID
+            const comment_id = initialComment.data.id;
+
+
+            const fullData = {
+                issue: issueBody,
+                repository: repoData,
+                comment_id
+            };
+
             try {
                 const flaskResponse = await axios.post('http://localhost:5000/report', fullData, {
                     headers: {
@@ -112,101 +202,45 @@ app.on('issues.opened', async (context) => {
                     throw new Error(`Failed to send data to Flask backend: ${flaskResponse.status} ${flaskResponse.statusText}`);
                 }
 
-                console.log('Repo info sent to Flask backend successfully from issues.opened event.', flaskResponse.data['ranked_files']);
-                sendRatings(flaskResponse.data, context);
+                // Await sendRatings to handle potential errors
+                await sendRatings(flaskResponse.data, context);
 
-                // Extract preprocessed bug report from the Flask response
-                const preprocessedBugReport = flaskResponse.data.preprocessed_bug_report;
-
-                // Now, construct the issueCommentBody including the preprocessed bug report
-                let issueCommentBody = 'Thank you for opening this issue!';
-
-                if (preprocessedBugReport) {
-                    issueCommentBody += `\n\n**Preprocessed Bug Report:**\n\n${preprocessedBugReport}`;
-                } else {
-                    issueCommentBody += '\n\nNo preprocessed bug report was returned.';
-                }
-
-                // Check for images in the issue body
-                if (issueBody) {
-                    const imageRegex = /https?:\/\/[^\s)\]]+/g;
-                    const imageUrls = issueBody.match(imageRegex);
-
-                    if (imageUrls && imageUrls.length > 0) {
-                        issueCommentBody += '\n\nI found the following images in the issue description:';
-                        imageUrls.forEach((imageUrl) => {
-                            issueCommentBody += `\n\n![Image](${imageUrl})`;
-                        });
-                    } else {
-                        issueCommentBody += '\n\nI did not find any images in the issue description.';
-                    }
-                }
-
-                // Handle creating or updating the comment
-                await handleIssueComment(context, issueCommentBody);
             } catch (error) {
-                console.error('Error while sending repo info from issues.opened:', error);
-
-                // Even if the Flask call fails, we might want to still acknowledge the issue
-                let issueCommentBody = 'Thank you for opening this issue!';
-
-                // Check for images in the issue body
-                if (issueBody) {
-                    const imageRegex = /https?:\/\/[^\s)\]]+/g;
-                    const imageUrls = issueBody.match(imageRegex);
-
-                    if (imageUrls && imageUrls.length > 0) {
-                        issueCommentBody += '\n\nI found the following images in the issue description:';
-                        imageUrls.forEach((imageUrl) => {
-                            issueCommentBody += `\n\n![Image](${imageUrl})`;
-                        });
-                    } else {
-                        issueCommentBody += '\n\nI did not find any images in the issue description.';
-                    }
-                }
-
-                // Handle creating or updating the comment
-                await handleIssueComment(context, issueCommentBody);
+                console.error('Error while sending repo info from issues.opened:', error.message);
+                // Reply to the issue with an error message
+                await replyWithError(context, issue.number, "An error occurred while communicating with the analysis backend.");
             }
+
+        } catch (error) {
+            console.error(`Failed to fetch repository data for ${repository.full_name}:`, error.message);
+            // Reply to the issue with an error message
+            await replyWithError(context, issue.number, "An error occurred while fetching repository data.");
         }
-    } catch (error) {
-        console.error(`Failed to fetch repository data for ${repository.full_name}:`, error);
-    }
-});
+    });
 
-// Function to handle creating or updating the issue comment
-async function handleIssueComment(context, issueCommentBody) {
-    try {
-        // Check if the bot already commented
-        const comments = await context.octokit.issues.listComments(context.issue());
-        const botComment = comments.data.find(
-            (comment) => comment.user.type === 'Bot' && comment.body.includes('Thank you for opening this issue!')
-        );
+    /**
+     * Replies to the issue with an error message.
+     *
+     * @param {Object} context - The Probot context object.
+     * @param {number} issueNumber - The issue number to reply to.
+     * @param {string} errorMessage - The error message to include in the comment.
+     */
+    const replyWithError = async (context, issueNumber, errorMessage) => {
+        const commentBody = `Hello! Unfortunately, ${errorMessage} Please try again later or contact support if the issue persists.`;
 
-        if (botComment) {
-            const updatedCommentBody = 'EDIT: The bug report was updated.\n\n' + issueCommentBody;
+        const issueComment = context.issue({body: commentBody, issue_number: issueNumber});
 
-            console.log('Editing comment with ID:', botComment.id);
-            await context.octokit.issues.updateComment({
-                ...context.issue(),
-                comment_id: botComment.id,
-                body: updatedCommentBody,
-            });
-        } else {
-            // No bot comment exists, create a new one
-            const issueComment = context.issue({ body: issueCommentBody });
-
-            console.log('Creating comment:', issueCommentBody);
+        try {
             await context.octokit.issues.createComment(issueComment);
+            console.log(`Posted error message to issue #${issueNumber}.`);
+        } catch (error) {
+            console.error('Failed to post error message to issue:', error.message);
         }
-    } catch (error) {
-        console.error('Error handling issue comments:', error);
-    }
-}
+    };
 
-function getInitializationComment(repoName) {
-    return `
-# Hang Tight, We're Getting Ready! ⏳
+    function getInitializationComment(repoName) {
+        return `
+# Hang Tight, We're Getting Ready! ⏳ 
 
 Hello, ${repoName}!
 
@@ -219,10 +253,10 @@ Initialization might take a few minutes, so hang tight while I set things up. He
 
 I'll let you know as soon as the setup is complete with a follow-up comment below. Thank you for your patience!
 `;
-}
+    }
 
-function getCompletionComment(repoName) {
-    return `
+    function getCompletionComment(repoName) {
+        return `
 # All Set! 🎉
 
 Good news, ${repoName}! 🥳 
@@ -241,6 +275,6 @@ I'm here to help you save time and debug smarter. Let the journey to cleaner cod
 Happy debugging,  
 LadyBug 🐞
 `;
-}
+    }
 
 };
