@@ -1,10 +1,13 @@
 import logging
 import os
 import json
+import time
+
 import requests
 import shutil
 import zipfile
 import io
+import requests
 
 from flask import Blueprint, abort, request, jsonify
 from git import Repo, GitCommandError
@@ -47,8 +50,13 @@ def initialization():
 
     logger.info("Received data from /initialization request.")
 
-    repo_info = extract_and_validate_repo_info(data)
-
+    repo_data = data.get('repoData')
+    comment_id = data.get('comment_id')
+    print(comment_id)
+    repo_info = extract_and_validate_repo_info(repo_data)
+    time.sleep(3)
+    send_update_to_probot(repo_info['owner'],repo_info['repo_name'],comment_id, "Validated!")
+    time.sleep(3)
     try:
         process_and_store_embeddings(repo_info)
         post_process_cleanup(repo_info)
@@ -81,14 +89,18 @@ def report():
 
     repository = data.get('repository')
     issue = data.get('issue')
-    if not repository or not issue:
+    comment_id = data.get('comment_id')
+
+    if not repository or not issue or not comment_id:
         abort(400, description="Missing 'repository' or 'issue' in the data")
 
     logger.info("Received data from /report request.")
 
     # Extract and validate repository information
     repo_info = extract_and_validate_repo_info(repository)
-
+    time.sleep(3)
+    send_update_to_probot(repo_info['owner'], repo_info['repo_name'], comment_id, "Validated!")
+    time.sleep(3)
     # Write issue to report file
     try:
         report_file_path = write_file_for_report_processing(repo_info['repo_name'], issue)
@@ -149,6 +161,35 @@ def report():
 # ======================================================================================================================
 # Helper Functions
 # ======================================================================================================================
+def send_update_to_probot(owner, repo, comment_id, message):
+    """
+    Sends an update message to the Probot /post-message endpoint to comment on a GitHub issue or pull request.
+
+    Args:
+        owner (str): The GitHub username or organization name that owns the repository.
+        repo (str): The name of the repository.
+        comment_id (int): The number of the issue or pull request to comment on.
+        message (str): The message to post as a comment.
+
+    Returns:
+        bool: True if the comment was posted successfully, False otherwise.
+    """
+    payload = {
+        'owner': owner,
+        'repo': repo,
+        'comment_id': comment_id,
+        'message': message
+    }
+    try:
+        response = requests.post('http://localhost:3000/post-message', json=payload)
+        response.raise_for_status()  # Raises stored HTTPError, if one occurred.
+
+        print(f"Successfully posted message to {owner}/{repo} Issue #{comment_id}: {message}")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to post message to Probot: {e}")
+        return False
+
 def partial_clone(old_sha, repo_info):
     """
     Clones the diff between two commits, applying pre-MVP filtering. Files are saved to the repos directory.
